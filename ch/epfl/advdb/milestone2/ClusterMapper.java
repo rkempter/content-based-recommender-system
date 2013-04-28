@@ -13,14 +13,14 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.filecache.DistributedCache;
 
-public class ClusterMapper extends Mapper<LongWritable, Text, IntWritable, ClusterFeatureWritable>{
+public class ClusterMapper extends Mapper<LongWritable, Text, IntWritable, MovieWritable>{
 
 	private Path[] localFiles;
 	
 	private ArrayList<Float[]> clusters;
 	
 	private IntWritable outputKey = new IntWritable();
-	private ClusterFeatureWritable outputValue = new ClusterFeatureWritable();
+	private MovieWritable outputValue = new MovieWritable();
 	
 	public void configure(JobConf job) throws IOException {
 		localFiles = DistributedCache.getLocalCacheFiles(job);

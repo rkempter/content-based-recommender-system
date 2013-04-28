@@ -95,9 +95,9 @@ public class DataClustering {
 		@SuppressWarnings("deprecation")
 		public DataClusteringJob(Configuration conf, String jobName,
 				Class<? extends Mapper<LongWritable, Text, 
-						IntWritable, ClusterFeatureWritable>> mapper,
-				Class<? extends Reducer<IntWritable, ClusterFeatureWritable, 
-						ClusterFeatureWritable, ClusterMoviesWritable>> reducer,
+						IntWritable, MovieWritable>> mapper,
+				Class<? extends Reducer<IntWritable, MovieWritable, 
+						CentroidWritable, ClusterMoviesWritable>> reducer,
 						String distributedCacheFilePath, String inputPath, 
 						String outputPath) throws IOException {
 			
@@ -106,10 +106,10 @@ public class DataClustering {
 			setMapperClass(mapper);
 			setReducerClass(reducer);
 
-			setOutputKeyClass(ClusterFeatureWritable.class);
+			setOutputKeyClass(CentroidWritable.class);
 			setOutputValueClass(ClusterMoviesWritable.class);
 			setMapOutputKeyClass(IntWritable.class);
-			setMapOutputValueClass(ClusterFeatureWritable.class);
+			setMapOutputValueClass(MovieWritable.class);
 
 			setInputFormatClass(TextInputFormat.class);
 			setOutputFormatClass(TextOutputFormat.class);
