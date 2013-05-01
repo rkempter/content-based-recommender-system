@@ -1,5 +1,7 @@
 package ch.epfl.advdb.milestone2;
 
-public class ClusterMoviesWritable {
+import org.apache.hadoop.io.Writable;
+
+public class ClusterMoviesWritable implements Writable {
 
 }
