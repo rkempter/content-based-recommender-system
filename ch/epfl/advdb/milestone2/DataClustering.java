@@ -1,8 +1,16 @@
 package ch.epfl.advdb.milestone2;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.Random;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
@@ -87,6 +95,30 @@ public class DataClustering {
 			
 		}
 		
+		
+	}
+
+	private void initialCentroids(int nbr, Configuration conf) throws IOException {
+		HashMap<Integer, ArrayList<Float>> movies = new HashMap<Integer, ArrayList<Float>>();
+		FileSystem fs = FileSystem.get(conf);
+		FileStatus[] status = fs.listStatus(new Path(inputDir));
+		for(int i = 0; i < status.length; i++) {
+			BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(status[i].getPath())));
+			String line = br.readLine();
+			while(line != null) {
+				// Regexp
+			}
+		}
+		
+		ArrayList<ArrayList<Float>> centroids = new ArrayList<ArrayList<Float>>();
+		
+		for(int i = 0; i < nbr; i++) {
+			Random r = new Random();
+			int el = r.nextInt(movies.size());
+			
+			ArrayList<Float> features = movies.get(el);
+			centroids.add(features);
+		}
 		
 	}
 	
