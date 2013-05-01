@@ -31,11 +31,11 @@ public class ClusterMapper extends Mapper<LongWritable, Text, IntWritable, Movie
 		}
 	}
 	
-	public void map(LongWritable key, Text value, Context context) {
+	public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
 		
-		HashMap<Integer, Float> featureVector = new HashMap<Integer, Float>();
+		ArrayList<MovieWritable> features = new ArrayList<MovieWritable>();
 		
-		// Transform value into text and load into hashmap
+		// Transform value into text and load into movie writable arraylist
 		
 		float maxSimilarity = 0;
 		int optimalCluster = 0;
@@ -49,12 +49,12 @@ public class ClusterMapper extends Mapper<LongWritable, Text, IntWritable, Movie
 			
 			float cosineSimilarity = 0;
 			
-			for(int feature : featureVector.keySet()) {
-				if(feature > centroidFeatureVector.length)
+			for(MovieWritable feature : features) {
+				if(feature.getFeatureNumber() > centroidFeatureVector.length)
 					new Exception("Feature is outside of centroid Feature vector");
 				
-				float vectorVal = featureVector.get(feature);
-				float centroidVal = centroidFeatureVector[feature];
+				float vectorVal = feature.getFeatureValue();
+				float centroidVal = centroidFeatureVector[feature.getFeatureNumber()];
 				
 				cosineSimilarity += vectorVal * centroidVal;
 				
@@ -70,9 +70,11 @@ public class ClusterMapper extends Mapper<LongWritable, Text, IntWritable, Movie
 			}
 		}
 		
-		outputKey.set(optimalCluster);
-		outputValue.set(featureVector.keySet());
-		context.write(outputKey, outputValue);
+		for(MovieWritable feature : features) {
+			outputKey.set(optimalCluster);
+			outputValue = feature;
+			context.write(outputKey, outputValue);
+		}
 	}
 	
 	private float getVectorSize(Float[] v) {
