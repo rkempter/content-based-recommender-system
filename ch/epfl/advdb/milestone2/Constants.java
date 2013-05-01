@@ -21,4 +21,6 @@ public class Constants {
 	public static final String IMDB_CLUSTER_OUTPUT_DIR = "/imdb/output/cluster/";
 	
 	public static final String TEXT_SEPARATOR = ",";
+	
+	public static final String FEATURE_DIMENSION_STRING = "feature.dimensions";
 }
