@@ -119,7 +119,13 @@ public class DataClustering {
 			ArrayList<Float> features = movies.get(el);
 			centroids.add(features);
 		}
+	}
+	
+	private boolean writeCentroidToHDFS(ArrayList<ArrayList<Float>> centroids, String outputPath) {
 		
+		// Write out in correct format.
+		
+		return true;
 	}
 	
 	private class DataClusteringJob extends Job {
@@ -127,8 +133,8 @@ public class DataClustering {
 		@SuppressWarnings("deprecation")
 		public DataClusteringJob(Configuration conf, String jobName,
 				Class<? extends Mapper<LongWritable, Text, 
-						IntWritable, MovieWritable>> mapper,
-				Class<? extends Reducer<IntWritable, MovieWritable, 
+						IntWritable, FeatureWritable>> mapper,
+				Class<? extends Reducer<IntWritable, FeatureWritable, 
 						CentroidWritable, ClusterMoviesWritable>> reducer,
 						String distributedCacheFilePath, String inputPath, 
 						String outputPath) throws IOException {
@@ -141,7 +147,7 @@ public class DataClustering {
 			setOutputKeyClass(CentroidWritable.class);
 			setOutputValueClass(ClusterMoviesWritable.class);
 			setMapOutputKeyClass(IntWritable.class);
-			setMapOutputValueClass(MovieWritable.class);
+			setMapOutputValueClass(FeatureWritable.class);
 
 			setInputFormatClass(TextInputFormat.class);
 			setOutputFormatClass(TextOutputFormat.class);

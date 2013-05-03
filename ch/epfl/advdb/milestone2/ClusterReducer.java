@@ -14,7 +14,7 @@ import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.filecache.DistributedCache;
 
 public class ClusterReducer extends 
-	Reducer<IntWritable, MovieWritable, CentroidWritable, ClusterMoviesWritable>{
+	Reducer<IntWritable, FeatureWritable, CentroidWritable, ClusterMoviesWritable>{
 	
 	int featureDimensions;
 	
@@ -25,18 +25,18 @@ public class ClusterReducer extends
 	}
 	
 	public void reduce(IntWritable key, 
-			Iterable<MovieWritable> values, Context context) {
+			Iterable<FeatureWritable> values, Context context) {
 		
 		Float[] centroid = new Float[featureDimensions];
 		HashMap<Integer, Boolean> movies = new HashMap<Integer, Boolean>();
 		
-		Iterator<MovieWritable> iterator = values.iterator();
+		Iterator<FeatureWritable> iterator = values.iterator();
 		
-		MovieWritable movie;
+		FeatureWritable movie;
 		
 		while(iterator.hasNext()) {
 			movie = iterator.next();
-			movies.put(movie.getMovie(), true);
+			movies.put(movie.getId(), true);
 			int featureNumber = movie.getFeatureNumber();
 			centroid[featureNumber] += movie.getFeatureValue();
 		}

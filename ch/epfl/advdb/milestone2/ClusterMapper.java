@@ -13,14 +13,14 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.filecache.DistributedCache;
 
-public class ClusterMapper extends Mapper<LongWritable, Text, IntWritable, MovieWritable>{
+public class ClusterMapper extends Mapper<LongWritable, Text, IntWritable, FeatureWritable>{
 
 	private Path[] localFiles;
 	
 	private ArrayList<Float[]> clusters;
 	
 	private IntWritable outputKey = new IntWritable();
-	private MovieWritable outputValue = new MovieWritable();
+	private FeatureWritable outputValue = new FeatureWritable();
 	
 	public void configure(JobConf job) throws IOException {
 		localFiles = DistributedCache.getLocalCacheFiles(job);
@@ -33,7 +33,7 @@ public class ClusterMapper extends Mapper<LongWritable, Text, IntWritable, Movie
 	
 	public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
 		
-		ArrayList<MovieWritable> features = new ArrayList<MovieWritable>();
+		ArrayList<FeatureWritable> features = new ArrayList<FeatureWritable>();
 		
 		// Transform value into text and load into movie writable arraylist
 		
@@ -49,7 +49,7 @@ public class ClusterMapper extends Mapper<LongWritable, Text, IntWritable, Movie
 			
 			float cosineSimilarity = 0;
 			
-			for(MovieWritable feature : features) {
+			for(FeatureWritable feature : features) {
 				if(feature.getFeatureNumber() > centroidFeatureVector.length)
 					new Exception("Feature is outside of centroid Feature vector");
 				
@@ -70,7 +70,7 @@ public class ClusterMapper extends Mapper<LongWritable, Text, IntWritable, Movie
 			}
 		}
 		
-		for(MovieWritable feature : features) {
+		for(FeatureWritable feature : features) {
 			outputKey.set(optimalCluster);
 			outputValue = feature;
 			context.write(outputKey, outputValue);
