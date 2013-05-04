@@ -111,16 +111,28 @@ public class DataClustering {
 		Random random = new Random();
 		
 		FileSystem fs = FileSystem.get(configuration);
-		FileStatus[] status = fs.listStatus(new Path(inputDir));
+		FileStatus[] status = fs.listStatus(new Path(inputDir+"/features/"));
+		
+		int lineCounter = 0;
 		
 		for(int i = 0; i < status.length; i++) {
 			BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(status[i].getPath())));
 			String line = br.readLine();
-			int r = random.nextInt(i);
 			
-			if(i < numOfIMDBClusters || r < numOfIMDBClusters) {
-				ArrayList<Integer> features = getIMDBFeaturesFromLine(line);
-				centroids.add(features);
+			while(line != null) {
+				if(lineCounter < numOfIMDBClusters) {
+					ArrayList<Integer> features = getIMDBFeaturesFromLine(line);
+					centroids.add(features);
+				} else {
+					int r = random.nextInt(lineCounter);
+					if(r < numOfIMDBClusters) {
+						ArrayList<Integer> features = getIMDBFeaturesFromLine(line);
+						centroids.set(r, features);
+					}
+				}
+				
+				line = br.readLine();
+				lineCounter++;
 			}
 		}
 		
@@ -155,13 +167,16 @@ public class DataClustering {
 		// Write out in correct format.
 		FileSystem fs = FileSystem.get(configuration);
 		
-		FSDataOutputStream out = fs.create(new Path(outputDir+"/centroids/centroids.txt"));
+		FSDataOutputStream out = fs.create(new Path(outputDir+"/centroids/centroids.dat"));
 		for(int i = 0; i < centroids.size(); i++) {
 			ArrayList<Integer> features = centroids.get(i);
 			
-			String line = features.get(0).toString();
-			for(int feat = 1; feat < features.size(); feat++) {
-				line += Constants.TEXT_SEPARATOR + features.get(feat).toString();
+			String line = "";
+			if(features.size() > 0) {
+				line = features.get(0).toString();
+				for(int feat = 1; feat < features.size(); feat++) {
+					line += Constants.TEXT_SEPARATOR + features.get(feat).toString();
+				}
 			}
 			line += "\n";
 			
