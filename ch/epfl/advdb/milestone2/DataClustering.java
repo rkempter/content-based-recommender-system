@@ -9,6 +9,7 @@ import java.util.Hashtable;
 import java.util.Random;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -54,6 +55,7 @@ public class DataClustering {
 	private String getName(String str, int iteration) {
 		return str+"_"+iteration;
 	}
+
 	
 	@SuppressWarnings("deprecation")
 	public void execute() 
@@ -93,39 +95,81 @@ public class DataClustering {
 				netflixClustering.waitForCompletion(true);
 			}
 			
-		}
-		
-		
+		}	
 	}
 
-	private void initialCentroids(int nbr, Configuration conf) throws IOException {
-		HashMap<Integer, ArrayList<Float>> movies = new HashMap<Integer, ArrayList<Float>>();
-		FileSystem fs = FileSystem.get(conf);
+	/**
+	 * Reservoir sampling
+	 * 
+	 * @param nbr
+	 * @param conf
+	 * @throws IOException
+	 */
+	public void initialIMDBCentroids() throws IOException {
+		
+		ArrayList<ArrayList<Integer>> centroids = new ArrayList<ArrayList<Integer>>();
+		Random random = new Random();
+		
+		FileSystem fs = FileSystem.get(configuration);
 		FileStatus[] status = fs.listStatus(new Path(inputDir));
+		
 		for(int i = 0; i < status.length; i++) {
 			BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(status[i].getPath())));
 			String line = br.readLine();
-			while(line != null) {
-				// Regexp
+			int r = random.nextInt(i);
+			
+			if(i < numOfIMDBClusters || r < numOfIMDBClusters) {
+				ArrayList<Integer> features = getIMDBFeaturesFromLine(line);
+				centroids.add(features);
 			}
 		}
 		
-		ArrayList<ArrayList<Float>> centroids = new ArrayList<ArrayList<Float>>();
-		
-		for(int i = 0; i < nbr; i++) {
-			Random r = new Random();
-			int el = r.nextInt(movies.size());
-			
-			ArrayList<Float> features = movies.get(el);
-			centroids.add(features);
-		}
+		writeCentroidToHDFS(centroids);
 	}
 	
-	private boolean writeCentroidToHDFS(ArrayList<ArrayList<Float>> centroids, String outputPath) {
+	/**
+	 * Transforms a line into a list of features
+	 * @param line
+	 * @return
+	 */
+	private ArrayList<Integer> getIMDBFeaturesFromLine(String line) {
+		ArrayList<Integer> features = new ArrayList<Integer>();
+		
+		String[] stringFeatures = line.split(Constants.TEXT_SEPARATOR);
+		
+		int i = 0;
+		for(String stringFeature : stringFeatures) {
+			// we dont want the first element (movie id)
+			if(i != 0) {
+				features.add(Integer.parseInt(stringFeature.trim()));
+			} else {
+				i++;
+			}
+		}
+		
+		return features;
+	}
+
+	private void writeCentroidToHDFS(ArrayList<ArrayList<Integer>> centroids) throws IOException {
 		
 		// Write out in correct format.
+		FileSystem fs = FileSystem.get(configuration);
 		
-		return true;
+		FSDataOutputStream out = fs.create(new Path(outputDir+"/centroids/centroids.txt"));
+		for(int i = 0; i < centroids.size(); i++) {
+			ArrayList<Integer> features = centroids.get(i);
+			
+			String line = features.get(0).toString();
+			for(int feat = 1; feat < features.size(); feat++) {
+				line += Constants.TEXT_SEPARATOR + features.get(feat).toString();
+			}
+			line += "\n";
+			
+			out.writeChars(line);
+		}
+		
+		out.close();
+		fs.close();
 	}
 	
 	private class DataClusteringJob extends Job {
