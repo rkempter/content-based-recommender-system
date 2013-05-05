@@ -51,13 +51,9 @@ public class NetflixCentroidBuilder {
 			while(line != null) {
 				
 				if(lineCounter % 11 == 0) {
-					System.out.println("Inside! with lineCOunter = "+lineCounter);
 					// Add values to centroid (if we just read one)
 					columnCounter++;
 					if(init && read) {
-						System.out.println("Set: "+r);
-						System.out.println("Values: "+values.length);
-						System.out.println("Columncounter: "+columnCounter);
 						if(columnCounter < numOfNetflixClusters)
 							centroids.add(values);
 						else
@@ -71,7 +67,6 @@ public class NetflixCentroidBuilder {
 					if(r < numOfNetflixClusters) {
 						read = true;
 					}
-					
 					init = true;
 				}
 				
@@ -110,18 +105,11 @@ public class NetflixCentroidBuilder {
 	}
 
 	private void writeCentroidToHDFS(ArrayList<Float[]> centroids) throws IOException {
-		
-		// Write out in correct format.
 		FileSystem fs = FileSystem.get(configuration);
-		
-		System.out.println("How many centroids: "+centroids.size());
 		
 		FSDataOutputStream out = fs.create(new Path(outputDir));
 		for(int i = 0; i < centroids.size(); i++) {
 			Float[] features = centroids.get(i);
-			
-			System.out.println("Feature length: "+features.length);
-			
 			String line = "";
 			line = features[0].toString();
 			for(int feat = 1; feat < features.length; feat++) {
