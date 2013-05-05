@@ -8,6 +8,7 @@ public class Constants {
 	public static final int NUM_OF_ITERATIONS = 10;
 	
 	public static final int NUM_OF_FEATURES = 1852;
+	public static final int NUM_OF_NETFLIX_FEATURES = 10;
 	
 	public static final String NETFLIX_U_INPUT_DIR = "/netflix/input/U/";
 	public static final String NETFLIX_V_INPUT_DIR = "/netflix/input/V/";
@@ -23,4 +24,7 @@ public class Constants {
 	public static final String TEXT_SEPARATOR = ",";
 	
 	public static final String FEATURE_DIMENSION_STRING = "feature.dimensions";
+	
+	public static final int IMDB_CLUSTER = 1;
+	public static final int NETFLIX_CLUSTER = 2;
 }
