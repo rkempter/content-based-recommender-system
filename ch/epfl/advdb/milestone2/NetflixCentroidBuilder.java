@@ -117,7 +117,8 @@ public class NetflixCentroidBuilder {
 			}
 			line += "\n";
 			
-			out.writeChars(line);
+			byte[] stringInBytes = line.getBytes();
+			out.write(stringInBytes);
 		}
 		
 		out.close();

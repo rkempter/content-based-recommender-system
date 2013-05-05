@@ -9,13 +9,11 @@ public class Main {
 	/*
 	 * Main function that controls the complete programm flow
 	 */
-	public static void main(String args[]) throws IOException
-	{
+	public static void main(String args[]) throws IOException, InterruptedException, ClassNotFoundException {
 		
 		// Test of reservoir sampling of centroids
-		DataClustering dc = new DataClustering(args[0], args[2], 2, 1, 1, 5, 5);
-		
-		dc.createInitialClusters();
+		DataClustering dc = new DataClustering(args[0], args[2], 2, Constants.NUM_OF_MAPPERS, Constants.NUM_OF_REDUCERS, 5, 5);
+		dc.execute();
 		
 		// Cluster V as well as the imdb feature dataset (max of 10 times)
 		

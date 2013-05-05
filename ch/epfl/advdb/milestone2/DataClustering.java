@@ -52,7 +52,7 @@ public class DataClustering {
 		configuration.setInt("mapred.map.tasks", numOfMappers);
 	}
 	
-	public void createInitialClusters() throws IOException {
+	public void createInitialCentroids() throws IOException {
 		IMDBCentroidBuilder icb = new IMDBCentroidBuilder(configuration, inputDir+"/features/", outputDir+"/imdb_centroids_0/centroids.dat", numOfIMDBClusters);
 		icb.createInitialCentroids();
 		
@@ -69,22 +69,31 @@ public class DataClustering {
 	public void execute() 
 			throws IOException, InterruptedException, ClassNotFoundException {
 		
-		{
-			// create first centroids
-		}
+		createInitialCentroids();
 		
-		for(int iter = 0; iter < numOfIterations; iter++) {
+		for(int iter = 0; iter < 1; iter++) {
+			System.out.println("Run iteration: "+iter);
 			
 			{
 				Configuration conf = new Configuration(configuration);
 				conf.setInt("mapred.reduce.tasks", numOfIMDBClusters);
-				DistributedCache.addCacheFile(new Path(getName(outputDir+"/imdb_centroids_0/", iter)).toUri(), conf);
+				
+				FileSystem fs = FileSystem.get(conf);
+				
+				FileStatus[] fileStatus = fs.listStatus(new Path(outputDir+"/imdb_centroids_"+iter+"/"));
+				for (FileStatus status : fileStatus) {
+				    DistributedCache.addCacheFile(status.getPath().toUri(), conf);
+				}
+				
+				DistributedCache.createSymlink(conf);
 				
 				DataClusteringJob imdbClustering = new DataClusteringJob(
-						conf, getName("IMDB Clustering", iter),
+						conf, getName("IMDB Clustering", iter), "I",
 						ClusterMapper.class, ClusterReducer.class,
-						getName(outputDir+"/imdb", iter), inputDir+"/imdb/",
-						getName(outputDir+"/imdb", (iter+1)));
+						outputDir+"/imdb_centroids_"+iter+"/", 
+						inputDir+"/features/",
+						outputDir+"/imdb_centroids_"+(iter+1)+"/");
+				
 				
 				imdbClustering.waitForCompletion(true);
 			}
@@ -109,23 +118,29 @@ public class DataClustering {
 	private class DataClusteringJob extends Job {
 		
 		@SuppressWarnings("deprecation")
-		public DataClusteringJob(Configuration conf, String jobName,
+		public DataClusteringJob(Configuration conf, String jobName, String matrixType,
 				Class<? extends Mapper<LongWritable, Text, 
 						IntWritable, FeatureWritable>> mapper,
 				Class<? extends Reducer<IntWritable, FeatureWritable, 
-						CentroidWritable, ClusterMoviesWritable>> reducer,
+						Text, FeatureWritable>> reducer,
 						String distributedCacheFilePath, String inputPath, 
 						String outputPath) throws IOException {
 			
 			super(conf, jobName);
 			
+			setJarByClass(DataClusteringJob.class);
+			
 			setMapperClass(mapper);
 			setReducerClass(reducer);
+			
+			conf.setStrings(Constants.MATRIX_TYPE, matrixType);
 
 			setOutputKeyClass(CentroidWritable.class);
 			setOutputValueClass(ClusterMoviesWritable.class);
 			setMapOutputKeyClass(IntWritable.class);
 			setMapOutputValueClass(FeatureWritable.class);
+			
+			setNumReduceTasks(Constants.NUM_OF_REDUCERS);
 
 			setInputFormatClass(TextInputFormat.class);
 			setOutputFormatClass(TextOutputFormat.class);

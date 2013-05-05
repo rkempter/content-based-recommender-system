@@ -99,7 +99,7 @@ public class IMDBCentroidBuilder {
 		for(int i = 0; i < centroids.size(); i++) {
 			ArrayList<Integer> features = centroids.get(i);
 			
-			String line = "";
+			String line = new String();
 			if(features.size() > 0) {
 				line = features.get(0).toString();
 				for(int feat = 1; feat < features.size(); feat++) {
@@ -107,8 +107,8 @@ public class IMDBCentroidBuilder {
 				}
 			}
 			line += "\n";
-			
-			out.writeChars(line);
+			byte[] stringInBytes = line.getBytes();
+			out.write(stringInBytes);
 		}
 		
 		out.close();

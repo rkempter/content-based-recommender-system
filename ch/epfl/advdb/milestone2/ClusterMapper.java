@@ -2,12 +2,15 @@ package ch.epfl.advdb.milestone2;
 
 import java.io.BufferedReader;
 import java.io.DataInputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Pattern;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
@@ -21,26 +24,33 @@ public class ClusterMapper extends Mapper<LongWritable, Text, IntWritable, Featu
 
 	private Path[] localFiles;
 	
-	private ArrayList<HashMap<Integer, Float>> clusters;
+	private ArrayList<HashMap<Integer, Float>> clusters = new ArrayList<HashMap<Integer, Float>>();
 	
 	private IntWritable outputKey = new IntWritable();
 	private FeatureWritable outputValue = new FeatureWritable();
 	
-	public void configure(JobConf job) throws IOException {
-		localFiles = DistributedCache.getLocalCacheFiles(job);
+	@SuppressWarnings("deprecation")
+	public void setup(Context context) throws IOException {
+		Configuration conf = context.getConfiguration();
 		
-		FileSystem fs = FileSystem.get(job);
+		localFiles = DistributedCache.getLocalCacheFiles(conf);
+		
 		String line = null;
 		
 		for(Path file : localFiles) {
-			DataInputStream d = new DataInputStream(fs.open(file));
-			BufferedReader reader = new BufferedReader(new InputStreamReader(d));
+			System.out.println("Path: "+file.toString());
+			
+			BufferedReader reader = new BufferedReader(new FileReader(file.toString()));
 			while ((line = reader.readLine()) != null){
+				System.out.println("Line: "+line);
 				HashMap<Integer, Float> features = new HashMap<Integer, Float>();
-				String[] stringFeatures = line.split(Constants.TEXT_SEPARATOR);
+				String[] stringFeatures = line.trim().split(Constants.TEXT_SEPARATOR);
 				for(String stringFeature : stringFeatures) {
-					features.put(Integer.parseInt(stringFeature.trim()), (float) 1);
+					if(stringFeature == "") break; 
+					int feature = Integer.parseInt(stringFeature.trim());
+					features.put(feature, (float) 1);
 				}
+				
 				clusters.add(features);
 			}
 			reader.close();
@@ -51,7 +61,10 @@ public class ClusterMapper extends Mapper<LongWritable, Text, IntWritable, Featu
 		
 		ArrayList<FeatureWritable> features = new ArrayList<FeatureWritable>();
 		
-		// Transform value into text and load into movie writable arraylist
+		String[] movie = value.toString().trim().split(Constants.TEXT_SEPARATOR);
+		for(int i = 1; i < movie.length; i++) {
+			features.add(new FeatureWritable(Integer.parseInt(movie[0]), Integer.parseInt(movie[i]), (float) 1));
+		}
 		
 		float maxSimilarity = 0;
 		int optimalCluster = 0;
@@ -80,7 +93,7 @@ public class ClusterMapper extends Mapper<LongWritable, Text, IntWritable, Featu
 			}
 			featureVectorSize = (float) Math.sqrt(featureVectorSize);
 			
-			cosineSimilarity = cosineSimilarity / (featureVectorSize * centroidSize);
+			cosineSimilarity = (featureVectorSize == 0 || centroidSize == 0) ? 0 : cosineSimilarity / (featureVectorSize * centroidSize);
 			
 			if(cosineSimilarity > maxSimilarity) {
 				maxSimilarity = cosineSimilarity;
@@ -88,7 +101,10 @@ public class ClusterMapper extends Mapper<LongWritable, Text, IntWritable, Featu
 			}
 		}
 		
+		System.out.println("Cosine Similarity: "+maxSimilarity);
+		
 		for(FeatureWritable feature : features) {
+			System.out.println("Optimal cluster: "+optimalCluster);
 			outputKey.set(optimalCluster);
 			outputValue = feature;
 			context.write(outputKey, outputValue);
