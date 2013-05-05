@@ -30,12 +30,12 @@ public class DataClustering {
 	Configuration configuration;
 	
 	String inputDir, outputDir;
-	int numOfIterations, numOfReducers, numOfMappers, numOfIMDBClusters, numOfVClusters;
+	int numOfIterations, numOfReducers, numOfMappers, numOfIMDBClusters, numOfNetflixClusters;
 	
 	public DataClustering(String inputDir, String outputDir,
 						  int numOfIterations, int numOfReducers,
 						  int numOfMappers, int numOfIMDBClusters,
-						  int numOfVClusters) {
+						  int numOfNetflixClusters) {
 		
 		this.inputDir = inputDir;
 		this.outputDir = outputDir;
@@ -43,13 +43,21 @@ public class DataClustering {
 		this.numOfReducers = numOfReducers;
 		this.numOfMappers = numOfMappers;
 		this.numOfIMDBClusters = numOfIMDBClusters;
-		this.numOfVClusters = numOfVClusters;
+		this.numOfNetflixClusters = numOfNetflixClusters;
 		
 		configuration = new Configuration();
 		configuration.set("mapred.textoutputformat.separator",
 						  String.valueOf(Constants.TEXT_SEPARATOR));
 		
 		configuration.setInt("mapred.map.tasks", numOfMappers);
+	}
+	
+	public void createInitialClusters() throws IOException {
+		IMDBCentroidBuilder icb = new IMDBCentroidBuilder(configuration, inputDir+"/features/", outputDir+"/imdb_centroids_0/centroids.dat", numOfIMDBClusters);
+		icb.createInitialCentroids();
+		
+		NetflixCentroidBuilder ncb = new NetflixCentroidBuilder(configuration, inputDir+"/V/", outputDir+"/netflix_centroids_0/centroids.dat", numOfNetflixClusters);
+		ncb.createInitialCentroids();
 	}
 	
 	private String getName(String str, int iteration) {
@@ -70,7 +78,7 @@ public class DataClustering {
 			{
 				Configuration conf = new Configuration(configuration);
 				conf.setInt("mapred.reduce.tasks", numOfIMDBClusters);
-				DistributedCache.addCacheFile(new Path(getName(outputDir+"/imdb/", iter)).toUri(), conf);
+				DistributedCache.addCacheFile(new Path(getName(outputDir+"/imdb_centroids_0/", iter)).toUri(), conf);
 				
 				DataClusteringJob imdbClustering = new DataClusteringJob(
 						conf, getName("IMDB Clustering", iter),
@@ -81,110 +89,21 @@ public class DataClustering {
 				imdbClustering.waitForCompletion(true);
 			}
 			
-			{
-				Configuration conf = new Configuration(configuration);
-				conf.setInt("mapred.reduce.tasks", numOfVClusters);
-				DistributedCache.addCacheFile(new Path(getName(outputDir+"/netflix/", iter)).toUri(), conf);
-				
-				DataClusteringJob netflixClustering = new DataClusteringJob(conf,
-					getName("Netflix Clustering", iter),
-					ClusterMapper.class, ClusterReducer.class,
-					getName(outputDir+"/netflix", iter), inputDir+"/netflix/",
-					getName(outputDir+"/netflix", iter+1));
-				
-				netflixClustering.waitForCompletion(true);
-			}
+//			{
+//				Configuration conf = new Configuration(configuration);
+//				conf.setInt("mapred.reduce.tasks", numOfVClusters);
+//				DistributedCache.addCacheFile(new Path(getName(outputDir+"/netflix_centroids_0/", iter)).toUri(), conf);
+//				
+//				DataClusteringJob netflixClustering = new DataClusteringJob(conf,
+//					getName("Netflix Clustering", iter),
+//					ClusterMapper.class, ClusterReducer.class,
+//					getName(outputDir+"/netflix", iter), inputDir+"/netflix/",
+//					getName(outputDir+"/netflix", iter+1));
+//				
+//				netflixClustering.waitForCompletion(true);
+//			}
 			
 		}	
-	}
-
-	/**
-	 * Reservoir sampling
-	 * 
-	 * @param nbr
-	 * @param conf
-	 * @throws IOException
-	 */
-	public void initialIMDBCentroids() throws IOException {
-		
-		ArrayList<ArrayList<Integer>> centroids = new ArrayList<ArrayList<Integer>>();
-		Random random = new Random();
-		
-		FileSystem fs = FileSystem.get(configuration);
-		FileStatus[] status = fs.listStatus(new Path(inputDir+"/features/"));
-		
-		int lineCounter = 0;
-		
-		for(int i = 0; i < status.length; i++) {
-			BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(status[i].getPath())));
-			String line = br.readLine();
-			
-			while(line != null) {
-				if(lineCounter < numOfIMDBClusters) {
-					ArrayList<Integer> features = getIMDBFeaturesFromLine(line);
-					centroids.add(features);
-				} else {
-					int r = random.nextInt(lineCounter);
-					if(r < numOfIMDBClusters) {
-						ArrayList<Integer> features = getIMDBFeaturesFromLine(line);
-						centroids.set(r, features);
-					}
-				}
-				
-				line = br.readLine();
-				lineCounter++;
-			}
-		}
-		
-		writeCentroidToHDFS(centroids);
-	}
-	
-	/**
-	 * Transforms a line into a list of features
-	 * @param line
-	 * @return
-	 */
-	private ArrayList<Integer> getIMDBFeaturesFromLine(String line) {
-		ArrayList<Integer> features = new ArrayList<Integer>();
-		
-		String[] stringFeatures = line.split(Constants.TEXT_SEPARATOR);
-		
-		int i = 0;
-		for(String stringFeature : stringFeatures) {
-			// we dont want the first element (movie id)
-			if(i != 0) {
-				features.add(Integer.parseInt(stringFeature.trim()));
-			} else {
-				i++;
-			}
-		}
-		
-		return features;
-	}
-
-	private void writeCentroidToHDFS(ArrayList<ArrayList<Integer>> centroids) throws IOException {
-		
-		// Write out in correct format.
-		FileSystem fs = FileSystem.get(configuration);
-		
-		FSDataOutputStream out = fs.create(new Path(outputDir+"/centroids/centroids.dat"));
-		for(int i = 0; i < centroids.size(); i++) {
-			ArrayList<Integer> features = centroids.get(i);
-			
-			String line = "";
-			if(features.size() > 0) {
-				line = features.get(0).toString();
-				for(int feat = 1; feat < features.size(); feat++) {
-					line += Constants.TEXT_SEPARATOR + features.get(feat).toString();
-				}
-			}
-			line += "\n";
-			
-			out.writeChars(line);
-		}
-		
-		out.close();
-		fs.close();
 	}
 	
 	private class DataClusteringJob extends Job {
