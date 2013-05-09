@@ -110,15 +110,12 @@ public class NetflixCentroidBuilder {
 		FSDataOutputStream out = fs.create(new Path(outputDir));
 		for(int i = 0; i < centroids.size(); i++) {
 			Float[] features = centroids.get(i);
-			String line = "";
-			line = features[0].toString();
-			for(int feat = 1; feat < features.length; feat++) {
-				line += Constants.TEXT_SEPARATOR + features[feat].toString();
+			for(int feat = 0; feat < features.length; feat++) {
+				String line = "N";
+				line += Constants.TEXT_SEPARATOR + i + Constants.TEXT_SEPARATOR + feat + Constants.TEXT_SEPARATOR + features[feat] + "\n";
+				byte[] stringInBytes = line.getBytes();
+				out.write(stringInBytes);
 			}
-			line += "\n";
-			
-			byte[] stringInBytes = line.getBytes();
-			out.write(stringInBytes);
 		}
 		
 		out.close();
