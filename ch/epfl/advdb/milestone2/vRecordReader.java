@@ -58,12 +58,13 @@ public class vRecordReader extends RecordReader<LongWritable, Text> {
         for(int i = 0; i < BUFFER_SIZE; i++) {
         	if (rr.nextKeyValue()) {
             	String[] lineElements = rr.getCurrentValue().toString().trim().split(Constants.TEXT_SEPARATOR);
-            	int row = Integer.parseInt(lineElements[1]);
+            	int row = Integer.parseInt(lineElements[1]) - 1;
+            	int column = Integer.parseInt(lineElements[2]);
+            	valueBuffer.append(column);
             	if(lineElements[0].equals("V")) {
             		keyBuffer[row] = rr.getCurrentKey().get();
+            		valueBuffer.append(Constants.TEXT_SEPARATOR);
                     valueBuffer.append(lineElements[3]);
-                    if(i == BUFFER_SIZE - 1)
-                    	valueBuffer.append(Constants.TEXT_SEPARATOR);
             	}
             } else {
                 return false;
@@ -71,6 +72,7 @@ public class vRecordReader extends RecordReader<LongWritable, Text> {
         }
         
         key.set(keyBuffer[0]);
+        System.out.println("Values: "+valueBuffer.toString());
         value.set(valueBuffer.toString());
         return true;
     }

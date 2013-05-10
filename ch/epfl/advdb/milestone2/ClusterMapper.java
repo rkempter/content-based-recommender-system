@@ -88,8 +88,10 @@ public class ClusterMapper extends Mapper<LongWritable, Text, IntWritable, Featu
 				features.add(new FeatureWritable(Integer.parseInt(movie[0]), Integer.parseInt(movie[i]), (float) 1));
 			}
 		} else {
+			System.out.println("Netflix!");
 			for(int i = 1; i < movie.length; i++) {
-				features.add(new FeatureWritable(Integer.parseInt(movie[0]), i, Float.parseFloat(movie[i])));
+				System.out.println("Features: "+movie[i]);
+				features.add(new FeatureWritable(Integer.parseInt(movie[0]), i, Float.parseFloat(movie[i].trim())));
 			}
 		}
 		
