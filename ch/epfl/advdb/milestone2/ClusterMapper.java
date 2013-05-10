@@ -24,37 +24,57 @@ public class ClusterMapper extends Mapper<LongWritable, Text, IntWritable, Featu
 
 	private Path[] localFiles;
 	
-	private ArrayList<HashMap<Integer, Float>> clusters = new ArrayList<HashMap<Integer, Float>>();
+	protected HashMap<Integer, Float>[] clusters;
 	
-	private IntWritable outputKey = new IntWritable();
-	private FeatureWritable outputValue = new FeatureWritable();
+	protected int numberOfClusters;
+	protected int clusterType;
 	
-	@SuppressWarnings("deprecation")
+	protected IntWritable outputKey = new IntWritable();
+	protected FeatureWritable outputValue = new FeatureWritable();
+	
+	@SuppressWarnings({ "deprecation", "unchecked" })
 	public void setup(Context context) throws IOException {
 		Configuration conf = context.getConfiguration();
+		
+		numberOfClusters = conf.getInt(Constants.FEATURE_DIMENSION_STRING, 10);
+		clusterType = conf.getInt(Constants.MATRIX_TYPE, Constants.NETFLIX_CLUSTER);
+		
+		clusters = new HashMap[numberOfClusters];
 		
 		localFiles = DistributedCache.getLocalCacheFiles(conf);
 		
 		String line = null;
 		
+		int lastClusterNumber = -1;
+		boolean init = false;
+		HashMap<Integer, Float> features = new HashMap<Integer, Float>();
+		
 		for(Path file : localFiles) {
-			System.out.println("Path: "+file.toString());
 			
 			BufferedReader reader = new BufferedReader(new FileReader(file.toString()));
 			while ((line = reader.readLine()) != null){
-				System.out.println("Line: "+line);
-				HashMap<Integer, Float> features = new HashMap<Integer, Float>();
+				
 				String[] stringFeatures = line.trim().split(Constants.TEXT_SEPARATOR);
-				for(String stringFeature : stringFeatures) {
-					if(stringFeature == "") break; 
-					int feature = Integer.parseInt(stringFeature.trim());
-					features.put(feature, (float) 1);
+				
+				if(!init) {
+					lastClusterNumber = Integer.parseInt(stringFeatures[1]);
+					init = true;
 				}
 				
-				clusters.add(features);
+				if(stringFeatures.length != 4)
+					new Exception("Problem with reading the file. Not correct format!");
+				
+				if(lastClusterNumber != Integer.parseInt(stringFeatures[1])) {
+					clusters[lastClusterNumber] = features;
+					lastClusterNumber = Integer.parseInt(stringFeatures[1]);
+					features = new HashMap<Integer, Float>();
+				}
+				
+				features.put(Integer.parseInt(stringFeatures[2]), Float.parseFloat(stringFeatures[3]));
 			}
 			reader.close();
 		}
+		clusters[lastClusterNumber] = features;
 	}
 	
 	public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
@@ -62,15 +82,26 @@ public class ClusterMapper extends Mapper<LongWritable, Text, IntWritable, Featu
 		ArrayList<FeatureWritable> features = new ArrayList<FeatureWritable>();
 		
 		String[] movie = value.toString().trim().split(Constants.TEXT_SEPARATOR);
-		for(int i = 1; i < movie.length; i++) {
-			features.add(new FeatureWritable(Integer.parseInt(movie[0]), Integer.parseInt(movie[i]), (float) 1));
+		
+		if(clusterType == Constants.IMDB_CLUSTER) {
+			for(int i = 1; i < movie.length; i++) {
+				features.add(new FeatureWritable(Integer.parseInt(movie[0]), Integer.parseInt(movie[i]), (float) 1));
+			}
+		} else {
+			for(int i = 1; i < movie.length; i++) {
+				features.add(new FeatureWritable(Integer.parseInt(movie[0]), i, Float.parseFloat(movie[i])));
+			}
 		}
 		
 		float maxSimilarity = 0;
 		int optimalCluster = 0;
 		
-		for(int i = 0; i < clusters.size(); i++) {
-			HashMap<Integer, Float> centroidFeatureVector = clusters.get(i);
+		for(int i = 0; i < clusters.length; i++) {
+			HashMap<Integer, Float> centroidFeatureVector = clusters[i];
+			
+			if(centroidFeatureVector == null) {
+				centroidFeatureVector = new HashMap<Integer, Float>();
+			}
 			
 			float centroidSize = getVectorSize(centroidFeatureVector);
 			
@@ -79,9 +110,6 @@ public class ClusterMapper extends Mapper<LongWritable, Text, IntWritable, Featu
 			float cosineSimilarity = 0;
 			
 			for(FeatureWritable feature : features) {
-				if(feature.getFeatureNumber() > centroidFeatureVector.size())
-					new Exception("Feature is outside of centroid Feature vector");
-				
 				if(centroidFeatureVector.get(feature.getFeatureNumber()) != null) {
 					float vectorVal = feature.getFeatureValue();
 					float centroidVal = centroidFeatureVector.get(feature.getFeatureNumber());
@@ -101,17 +129,14 @@ public class ClusterMapper extends Mapper<LongWritable, Text, IntWritable, Featu
 			}
 		}
 		
-		System.out.println("Cosine Similarity: "+maxSimilarity);
-		
 		for(FeatureWritable feature : features) {
-			System.out.println("Optimal cluster: "+optimalCluster);
 			outputKey.set(optimalCluster);
 			outputValue = feature;
 			context.write(outputKey, outputValue);
 		}
 	}
 	
-	private float getVectorSize(HashMap<Integer, Float> v) {
+	protected float getVectorSize(HashMap<Integer, Float> v) {
 		float result = 0;
 		
 		for(Map.Entry<Integer, Float> feature : v.entrySet()) {
