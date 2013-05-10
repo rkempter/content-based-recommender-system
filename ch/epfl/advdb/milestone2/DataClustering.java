@@ -78,7 +78,7 @@ public class DataClustering {
 		
 		int iter = 0;
 		
-		for(; iter < 2; iter++) {
+		for(; iter < 10; iter++) {
 			System.out.println("Run iteration: "+iter);
 			
 			{
@@ -123,9 +123,8 @@ public class DataClustering {
 				DistributedCache.createSymlink(conf);
 				
 				DataClusteringJob netflixClustering = new DataClusteringJob(
-						conf, getName("Netflix Clustering", iter), "I",
-						ClusterNetflixMapper.class, ClusterReducer.class,
-						vInputFormat.class,
+						conf, getName("Netflix Clustering", iter), "N",
+						ClusterMapper.class, ClusterReducer.class,
 						outputDir+"/"+numOfNetflixClusters+"_netflix_centroids_"+iter+"/", 
 						inputDir+"/V/",
 						outputDir+"/"+numOfNetflixClusters+"_netflix_centroids_"+(iter+1)+"/");
@@ -154,7 +153,7 @@ public class DataClustering {
 			DistributedCache.createSymlink(conf);
 			
 			MovieClusteringJob imdbMovieClustering = new MovieClusteringJob(
-					conf, "IMDB Movie Clustering",
+					conf, "IMDB Movie Clustering", "I",
 					MovieMapper.class, MovieReducer.class,
 					outputDir+"/"+numOfIMDBClusters+"_imdb_centroids_"+iter+"/", 
 					inputDir+"/features/",
@@ -162,6 +161,30 @@ public class DataClustering {
 			
 			
 			imdbMovieClustering.waitForCompletion(true);
+		}
+		
+		{
+			Configuration conf = new Configuration(configuration);
+			conf.setInt("mapred.reduce.tasks", numOfNetflixClusters);
+			
+			FileSystem fs = FileSystem.get(conf);
+			
+			FileStatus[] fileStatus = fs.listStatus(new Path(outputDir+"/"+numOfNetflixClusters+"_netflix_centroids_"+iter+"/"));
+			for (FileStatus status : fileStatus) {
+			    DistributedCache.addCacheFile(status.getPath().toUri(), conf);
+			}
+			
+			DistributedCache.createSymlink(conf);
+			
+			MovieClusteringJob netflixMovieClustering = new MovieClusteringJob(
+					conf, "Netflix Movie Clustering", "N",
+					MovieMapper.class, MovieReducer.class,
+					outputDir+"/"+numOfNetflixClusters+"_netflix_centroids_"+iter+"/", 
+					inputDir+"/V/",
+					outputDir+"/netflix_movies/");
+			
+			
+			netflixMovieClustering.waitForCompletion(true);
 		}
 	
 	}
@@ -176,7 +199,7 @@ public class DataClustering {
 	
 	private class MovieClusteringJob extends Job {
 		
-		public MovieClusteringJob(Configuration conf, String jobName,
+		public MovieClusteringJob(Configuration conf, String jobName, String matrixType,
 				Class<? extends Mapper<LongWritable, Text, 
 						IntWritable, IntWritable>> mapper,
 				Class<? extends Reducer<IntWritable, IntWritable, 
@@ -198,7 +221,11 @@ public class DataClustering {
 			
 			setNumReduceTasks(Constants.NUM_OF_REDUCERS);
 
-			setInputFormatClass(TextInputFormat.class);
+			if(matrixType.equals("N")) {
+				setInputFormatClass(vInputFormat.class);
+			} else {
+				setInputFormatClass(TextInputFormat.class);
+			}
 			setOutputFormatClass(TextOutputFormat.class);
 
 			FileInputFormat.addInputPath(this, new Path(inputPath));
@@ -222,6 +249,12 @@ public class DataClustering {
 			
 			setJarByClass(DataClusteringJob.class);
 			
+			if(matrixType.equals("N")) {
+				setInputFormatClass(vInputFormat.class);
+			} else {
+				setInputFormatClass(TextInputFormat.class);
+			}
+
 			setMapperClass(mapper);
 			setReducerClass(reducer);
 
@@ -232,40 +265,6 @@ public class DataClustering {
 			
 			setNumReduceTasks(Constants.NUM_OF_REDUCERS);
 
-			setInputFormatClass(TextInputFormat.class);
-			setOutputFormatClass(TextOutputFormat.class);
-
-			FileInputFormat.addInputPath(this, new Path(inputPath));
-			FileOutputFormat.setOutputPath(this, new Path(outputPath));
-			
-		}
-		
-		public DataClusteringJob(Configuration conf, String jobName, String matrixType,
-				Class<? extends Mapper<LongWritable, Text, 
-						IntWritable, FeatureWritable>> mapper,
-				Class<? extends Reducer<IntWritable, FeatureWritable, 
-						Text, FeatureWritable>> reducer,
-				Class<? extends TextInputFormat> inputFormat, 
-						String distributedCacheFilePath, String inputPath, 
-						String outputPath) throws IOException {
-			
-			super(conf, jobName);
-			
-			setJarByClass(DataClusteringJob.class);
-			
-			setMapperClass(mapper);
-			setReducerClass(reducer);
-			
-			setInputFormatClass(inputFormat);
-
-			setOutputKeyClass(Text.class);
-			setOutputValueClass(FeatureWritable.class);
-			setMapOutputKeyClass(IntWritable.class);
-			setMapOutputValueClass(FeatureWritable.class);
-			
-			setNumReduceTasks(Constants.NUM_OF_REDUCERS);
-
-			setInputFormatClass(TextInputFormat.class);
 			setOutputFormatClass(TextOutputFormat.class);
 
 			FileInputFormat.addInputPath(this, new Path(inputPath));

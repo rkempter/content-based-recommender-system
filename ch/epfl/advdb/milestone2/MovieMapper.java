@@ -82,8 +82,14 @@ public class MovieMapper extends Mapper<LongWritable, Text, IntWritable, IntWrit
 		
 		String[] movie = value.toString().trim().split(Constants.TEXT_SEPARATOR);
 		
-		for(int i = 1; i < movie.length; i++) {
-			features.add(new FeatureWritable(Integer.parseInt(movie[0]), Integer.parseInt(movie[i]), (float) 1));
+		if(clusterType == Constants.IMDB_CLUSTER) {
+			for(int i = 1; i < movie.length; i++) {
+				features.add(new FeatureWritable(Integer.parseInt(movie[0]), Integer.parseInt(movie[i]), (float) 1));
+			}
+		} else {
+			for(int i = 1; i < movie.length; i++) {
+				features.add(new FeatureWritable(Integer.parseInt(movie[0]), i, Float.parseFloat(movie[i].trim())));
+			}
 		}
 			
 		float maxSimilarity = 0;

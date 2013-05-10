@@ -72,7 +72,6 @@ public class vRecordReader extends RecordReader<LongWritable, Text> {
         }
         
         key.set(keyBuffer[0]);
-        System.out.println("Values: "+valueBuffer.toString());
         value.set(valueBuffer.toString());
         return true;
     }
