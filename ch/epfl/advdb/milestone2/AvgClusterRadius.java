@@ -26,17 +26,40 @@ import org.apache.hadoop.fs.Path;
  */
 
 public class AvgClusterRadius {
+	
+	private int clusterType;
+	private int nbrClusters;
+	private Configuration conf;
+	String inputPath;
+	String centroidPath;
+	String outputPath;
+	FileSystem fs;
+	ArrayList<HashMap<Integer, Float>> centroidList = new ArrayList<HashMap<Integer, Float>>();
 
 	@SuppressWarnings("deprecation")
 	AvgClusterRadius(int clusterType, int nbrClusters, Configuration conf, String inputPath, String centroidPath, String outputPath) throws FileNotFoundException, IOException {	
-		ArrayList<Hashtable<Integer, Float>> centroidList = new ArrayList<Hashtable<Integer, Float>>();
-		float[] clusterRadius = new float[nbrClusters];
 		
-		FileSystem fs = FileSystem.get(conf);
+		this.clusterType = clusterType;
+		this.nbrClusters = nbrClusters;
+		this.conf = conf;
+		this.inputPath = inputPath;
+		this.centroidPath = centroidPath;
+		this.outputPath = outputPath;
+		this.fs = FileSystem.get(conf);
 		
 		centroidList = readCentroids(conf, centroidPath);
+	}
+	
+	public float execute() throws FileNotFoundException, IOException {
+		if(clusterType == Constants.IMDB_CLUSTER)
+			return executeI();
+		else
+			return executeV();
+	}
+	
+	private float executeI() throws FileNotFoundException, IOException {
+		float[] clusterRadius = new float[nbrClusters];
 		
-		// for each file in the IMDB dataset
 		FileStatus[] fileStatus = fs.listStatus(new Path(inputPath));
 		for(FileStatus status : fileStatus) {
 			
@@ -47,21 +70,13 @@ public class AvgClusterRadius {
 			while((line = in.readLine()) != null) {
 				String[] stringFeatures = line.trim().split(Constants.TEXT_SEPARATOR);
 				
-				int optimalCluster;
-				if(clusterType == Constants.IMDB_CLUSTER)
-					optimalCluster = getOptimalCluster(stringFeatures, centroidList);
-				else {
-					optimalCluster = getOptimalCluster(line, centroidList);
-					if(optimalCluster == -1)
-						continue;
-				}
+				int optimalCluster = getOptimalCluster(stringFeatures);
 				
 				float radius = getDistance(centroidList.get(optimalCluster), stringFeatures);
 				if(radius > clusterRadius[optimalCluster]) {
 					clusterRadius[optimalCluster] = radius;
 				}
 			}
-			
 			in.close();	
 		}
 		
@@ -69,12 +84,63 @@ public class AvgClusterRadius {
 		for(int i = 0; i < nbrClusters; i++) {
 			avgRadius += clusterRadius[i];
 		}
-		avgRadius = avgRadius / nbrClusters;
-		
-		writeRadiusToFile(fs, outputPath, nbrClusters, avgRadius);
+		return avgRadius / nbrClusters;
 	}
 	
-	private int getOptimalCluster(String[] stringFeatures, ArrayList<Hashtable<Integer, Float>> centroidList) {
+	
+	public float executeV() throws IOException {
+		
+		ArrayList<float[]> movies = new ArrayList<float[]>();
+		float[] clusterRadius = new float[nbrClusters];
+		
+		// for each file in the IMDB dataset
+		FileStatus[] fileStatus = fs.listStatus(new Path(inputPath));
+		for(FileStatus status : fileStatus) {
+					
+			String line;
+					
+			FSDataInputStream in = fs.open(status.getPath());
+			int i = 0;
+			
+			movies.add(new float[10]);
+			
+			while((line = in.readLine()) != null) {
+				
+				String[] stringFeatures = line.trim().split(Constants.TEXT_SEPARATOR);
+				
+				if(stringFeatures[0].equals("E"))
+					continue;
+				
+				i++;
+				int movieId = Integer.parseInt(stringFeatures[2]) - 1;
+				int row = Integer.parseInt(stringFeatures[1]) - 1;
+				
+				while(movieId >= movies.size())
+					movies.add(new float[10]);
+				
+				movies.get(movieId)[row] = Float.parseFloat(stringFeatures[3]);
+
+				if(i % 10 == 0) {
+					int optimalCluster = getOptimalCluster(movies.get(movieId));
+					float radius = getDistance(centroidList.get(optimalCluster), movies.get(movieId));
+
+					if(radius > clusterRadius[optimalCluster]) {
+						clusterRadius[optimalCluster] = radius;
+					}
+				}
+			}
+						
+			in.close();	
+		}
+		
+		float avgRadius = 0;
+		for(int i = 0; i < nbrClusters; i++) {
+			avgRadius += clusterRadius[i];
+		}
+		return avgRadius / nbrClusters;
+	}
+	
+	private int getOptimalCluster(String[] stringFeatures) {
 		float vectorSize = getVectorSizeFromStrings(stringFeatures);
 		
 		int optimalCluster = 0;
@@ -82,7 +148,7 @@ public class AvgClusterRadius {
 		float maxCosineSimilarity = 0;
 		
 		for(int i = 0; i < centroidList.size(); i++) {
-			Hashtable<Integer, Float> centroid = centroidList.get(i);
+			HashMap<Integer, Float> centroid = centroidList.get(i);
 			float size = getFloatVectorSize(centroid);
 			
 			float cosineSimilarity = 0;
@@ -107,62 +173,50 @@ public class AvgClusterRadius {
 		return optimalCluster;
 	}
 	
-	private int getOptimalCluster(String line, ArrayList<Hashtable<Integer, Float>> centroidList) {
+	private int getOptimalCluster(float[] movie) {
 
-		ArrayList<FeatureWritable> features = new ArrayList<FeatureWritable>();
-		
-		String[] movie = line.trim().split(Constants.TEXT_SEPARATOR);
-		
-		if(movie[0].equals("V")) {
-			for(int i = 1; i < movie.length; i++) {
-				features.add(new FeatureWritable(Integer.parseInt(movie[2]), Integer.parseInt(movie[1]), Float.parseFloat(movie[3])));
-			}
-		
-			float maxSimilarity = 0;
-			int optimalCluster = 0;
-			
-			for(int i = 0; i < centroidList.size(); i++) {
-				Hashtable<Integer, Float> centroidFeatureVector = centroidList.get(i);
-				
-				float centroidSize = getFloatVectorSize(centroidFeatureVector);
-				
-				float featureVectorSize = 0;
-				
-				float cosineSimilarity = 0;
-				
-				for(FeatureWritable feature : features) {
-					if(centroidFeatureVector.get(feature.getFeatureNumber()) != null) {
-						float vectorVal = feature.getFeatureValue();
-						float centroidVal = centroidFeatureVector.get(feature.getFeatureNumber());
-					
-						cosineSimilarity += vectorVal * centroidVal;
-						
-						featureVectorSize += Math.pow(vectorVal, 2);
-					}
-				}
-				featureVectorSize = (float) Math.sqrt(featureVectorSize);
-				
-				cosineSimilarity = (featureVectorSize == 0 || centroidSize == 0) ? 0 : cosineSimilarity / (featureVectorSize * centroidSize);
-				
-				if(cosineSimilarity > maxSimilarity) {
-					maxSimilarity = cosineSimilarity;
-					optimalCluster = i;
-				}
-			}
-			
-			return optimalCluster;
+		float vectorSize = 0;
+		for(int j = 0; j < movie.length; j++) {
+			vectorSize += Math.pow(movie[j], 2);
 		}
 		
-		return -1;
+		int optimalCluster = 0;
+		
+		float maxCosineSimilarity = 0;
+		
+		for(int i = 0; i < centroidList.size(); i++) {
+			HashMap<Integer, Float> centroid = centroidList.get(i);
+			
+			System.out.println("centroid size: "+centroid.size());
+			
+			float size = getFloatVectorSize(centroid);
+			
+			float cosineSimilarity = 0;
+			
+			// 0 is equal to movie id
+			for(int j = 0; j < movie.length; j++) {
+				System.out.println("Element at j: "+centroid.get(j));
+				cosineSimilarity += centroid.get(j+1) * movie[j];
+			}
+			
+			cosineSimilarity = cosineSimilarity / (size * vectorSize);
+			
+			if(maxCosineSimilarity < cosineSimilarity) {
+				maxCosineSimilarity = cosineSimilarity;
+				optimalCluster = i;
+			}
+		}
+		
+		return optimalCluster;
 	}
 
 	
-	private ArrayList<Hashtable<Integer, Float>> readCentroids(Configuration conf,
+	private ArrayList<HashMap<Integer, Float>> readCentroids(Configuration conf,
 			String centroidPath) throws FileNotFoundException, IOException {
 		
 		FileSystem fs = FileSystem.get(conf);
 		
-		ArrayList<Hashtable<Integer, Float>> centroidList = new ArrayList<Hashtable<Integer, Float>>();
+		ArrayList<HashMap<Integer, Float>> centroidList = new ArrayList<HashMap<Integer, Float>>();
 		
 		FileStatus[] fileStatus = fs.listStatus(new Path(centroidPath));
 		
@@ -176,7 +230,7 @@ public class AvgClusterRadius {
 				String[] stringFeatures = line.trim().split(Constants.TEXT_SEPARATOR);
 				int cluster = Integer.parseInt(stringFeatures[1]);
 				while(centroidList.size() < cluster+1) {
-					centroidList.add(new Hashtable<Integer, Float>());
+					centroidList.add(new HashMap<Integer, Float>());
 				}
 				centroidList.get(cluster).put(Integer.parseInt(stringFeatures[2]), Float.parseFloat(stringFeatures[3]));
 			}
@@ -187,8 +241,7 @@ public class AvgClusterRadius {
 		return centroidList;
 	}
 
-	private void writeRadiusToFile(FileSystem fs, String outputPath, int nbrClusters,
-			float avgRadius) throws IOException {
+	public void writeRadiusToFile(float avgRadius) throws IOException {
 		
 		FSDataOutputStream out = fs.append(new Path(outputPath));
 		String line = nbrClusters + Constants.TEXT_SEPARATOR + avgRadius + "\n";
@@ -197,7 +250,7 @@ public class AvgClusterRadius {
 		out.close();
 	}
 
-	private float getFloatVectorSize(Hashtable<Integer, Float> point) {
+	private float getFloatVectorSize(HashMap<Integer, Float> point) {
 		float size = 0;
 		for(Map.Entry<Integer, Float> entry : point.entrySet()) {
 			size += Math.pow(entry.getValue(), 2);
@@ -206,18 +259,30 @@ public class AvgClusterRadius {
 		return (float) Math.sqrt(size);
 	}
 
-	private float getDistance(Hashtable<Integer, Float> hashtable,
+	public float getDistance(HashMap<Integer, Float> hashtable,
 			String[] stringFeatures) {
 		
-		int length = 0;
+		float length = 0;
 		
-		for(String stringFeature : stringFeatures) {
-			int feature = Integer.parseInt(stringFeature);
-			if(hashtable.contains(feature)) {
+		for(int i = 1; i < stringFeatures.length; i++) {
+			int feature = Integer.parseInt(stringFeatures[i]);
+			if(hashtable.containsKey(feature)) {
 				length += Math.pow((1.0 - hashtable.get(feature)), 2);
 			} else {
 				length += 1.0;
 			}
+		}
+		
+		return (float) Math.sqrt(length);
+	}
+	
+	public float getDistance(HashMap<Integer, Float> hashtable,
+			float[] features) {
+		
+		float length = 0;
+		
+		for(int i = 0; i < features.length; i++) {
+			length += Math.pow((features[i] - hashtable.get(i+1)), 2);
 		}
 		
 		return (float) Math.sqrt(length);

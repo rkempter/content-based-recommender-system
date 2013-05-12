@@ -22,8 +22,6 @@ import org.apache.hadoop.mapreduce.filecache.DistributedCache;
 
 public class MovieMapper extends Mapper<LongWritable, Text, IntWritable, IntWritable>{
 
-	private Path[] localFiles;
-	
 	protected HashMap<Integer, Float>[] clusters;
 	
 	protected int numberOfClusters;
@@ -36,44 +34,12 @@ public class MovieMapper extends Mapper<LongWritable, Text, IntWritable, IntWrit
 	public void setup(Context context) throws IOException {
 		Configuration conf = context.getConfiguration();
 		
-		numberOfClusters = conf.getInt(Constants.FEATURE_DIMENSION_STRING, 10);
+		numberOfClusters = conf.getInt(Constants.NBR_CLUSTERS, 10);
 		clusterType = conf.getInt(Constants.MATRIX_TYPE, Constants.NETFLIX_CLUSTER);
 		
-		clusters = new HashMap[numberOfClusters];
+		Path[] localFiles = DistributedCache.getLocalCacheFiles(conf);
 		
-		localFiles = DistributedCache.getLocalCacheFiles(conf);
-		
-		String line = null;
-		
-		int lastClusterNumber = -1;
-		boolean init = false;
-		HashMap<Integer, Float> features = new HashMap<Integer, Float>();
-		
-		for(Path file : localFiles) {
-			
-			BufferedReader reader = new BufferedReader(new FileReader(file.toString()));
-			while ((line = reader.readLine()) != null){
-				
-				String[] stringFeatures = line.trim().split(Constants.TEXT_SEPARATOR);
-				
-				if(!init) {
-					lastClusterNumber = Integer.parseInt(stringFeatures[1]);
-					init = true;
-				}
-				
-				if(stringFeatures.length != 4)
-					new Exception("Problem with reading the file. Not correct format!");
-				
-				if(lastClusterNumber != Integer.parseInt(stringFeatures[1])) {
-					clusters[lastClusterNumber] = features;
-					lastClusterNumber = Integer.parseInt(stringFeatures[1]);
-					features = new HashMap<Integer, Float>();
-				}
-				
-				features.put(Integer.parseInt(stringFeatures[2]), Float.parseFloat(stringFeatures[3]));
-			}
-			reader.close();
-		}
+		clusters = Utility.readCluster(new HashMap[numberOfClusters], localFiles);
 	}
 	
 	public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
@@ -91,55 +57,13 @@ public class MovieMapper extends Mapper<LongWritable, Text, IntWritable, IntWrit
 				features.add(new FeatureWritable(Integer.parseInt(movie[0]), i, Float.parseFloat(movie[i].trim())));
 			}
 		}
+		
+		if(features.size() > 0) {
+			int optimalCluster = Utility.getBestCluster(clusters, features);
 			
-		float maxSimilarity = 0;
-		int optimalCluster = 0;
-			
-		for(int i = 0; i < clusters.length; i++) {
-			HashMap<Integer, Float> centroidFeatureVector = clusters[i];
-				
-			if(centroidFeatureVector == null) {
-				centroidFeatureVector = new HashMap<Integer, Float>();
-			}
-				
-			float centroidSize = getVectorSize(centroidFeatureVector);
-				
-			float featureVectorSize = 0;
-				
-			float cosineSimilarity = 0;
-				
-			for(FeatureWritable feature : features) {
-				if(centroidFeatureVector.get(feature.getFeatureNumber()) != null) {
-					float vectorVal = feature.getFeatureValue();
-					float centroidVal = centroidFeatureVector.get(feature.getFeatureNumber());
-					
-					cosineSimilarity += vectorVal * centroidVal;
-						
-					featureVectorSize += Math.pow(vectorVal, 2);
-				}
-			}
-			featureVectorSize = (float) Math.sqrt(featureVectorSize);
-				
-			cosineSimilarity = (featureVectorSize == 0 || centroidSize == 0) ? 0 : cosineSimilarity / (featureVectorSize * centroidSize);
-				
-			if(cosineSimilarity > maxSimilarity) {
-				maxSimilarity = cosineSimilarity;
-				optimalCluster = i;
-			}
+			outputKey.set(optimalCluster);
+			outputValue.set(Integer.parseInt(movie[0]));
+			context.write(outputKey, outputValue);
 		}
-		
-		outputKey.set(optimalCluster);
-		outputValue.set(Integer.parseInt(movie[0]));
-		context.write(outputKey, outputValue);
-	}
-	
-	protected float getVectorSize(HashMap<Integer, Float> v) {
-		float result = 0;
-		
-		for(Map.Entry<Integer, Float> feature : v.entrySet()) {
-			result += Math.pow(feature.getValue(), 2);
-		}
-		
-		return (float) Math.sqrt(result);
 	}
 }

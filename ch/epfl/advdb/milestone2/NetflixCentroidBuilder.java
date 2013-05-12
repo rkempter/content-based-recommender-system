@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Random;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -27,89 +28,107 @@ public class NetflixCentroidBuilder {
 		this.outputDir = outputDir;
 		this.numOfNetflixClusters = numOfNetflixClusters;
 	}
-
-	public void createInitialCentroids() throws IOException {
+	
+	public void createInitialAdvancedCentroids() throws IOException {
+		ArrayList<float[]> centroids = new ArrayList<float[]>();
 		
-		ArrayList<Float[]> centroids = new ArrayList<Float[]>();
-		Random random = new Random();
+		centroids.add(getFirstCentroid());
 		
-		FileSystem fs = FileSystem.get(configuration);
-		FileStatus[] status = fs.listStatus(new Path(inputDir));
-		
-		int lineCounter = 0;
-		int columnCounter = -2;
-		
-		for(int i = 0; i < status.length; i++) {
-			BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(status[i].getPath())));
-			String line = br.readLine();
-
-			boolean read = false;
-			boolean init = false;
-			int r = 0;
-			Float[] values = null;
-
-			while(line != null) {
+		for(int i = 1; i < numOfNetflixClusters; i++) {
+			centroids.add(new float[10]);
+			String line;
+			float[] features = new float[10];
+			float distance = 0;
+			float maxDistance = 0;
+			int column = 0;
+			
+			FileSystem fs = FileSystem.get(configuration);
+			FileStatus[] status = fs.listStatus(new Path(inputDir));
+			
+			for(int j = 0; j < status.length; j++) {
+			
+				BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(status[j].getPath())));
 				
-				if(lineCounter % 11 == 0) {
-					// Add values to centroid (if we just read one)
-					columnCounter++;
-					if(init && read) {
-						if(columnCounter < numOfNetflixClusters)
-							centroids.add(values);
-						else
-							centroids.set(r, values);
-					}
-					// Check if next line should be read (Reservoir Sampling)
-					values = new Float[10];
-					r = columnCounter < numOfNetflixClusters ? columnCounter : random.nextInt(columnCounter);
+				while((line = br.readLine()) != null) {
+					String[] element = line.split(Constants.TEXT_SEPARATOR);
 					
-					read = false;
-					if(r < numOfNetflixClusters) {
-						read = true;
+					if(element[0].equals("E")) {
+						float minDistance = 1000000;
+						for(float[] centroid : centroids) {
+							distance = computeDistance(features, centroid);
+							if(minDistance > distance) {
+								minDistance = distance;
+							}
+						}
+						if(minDistance > maxDistance) {
+							maxDistance = minDistance;
+							centroids.set(i, features);
+						}
+						features = new float[10];
+					} else {
+						// V, row, column, value
+						column = Integer.parseInt(element[2]);
+						int row = Integer.parseInt(element[1]) - 1;
+						features[row] = Float.parseFloat(element[3]);
 					}
-					init = true;
 				}
-				
-				if(read && lineCounter % 11 != 10) {
-					values = readFloatFromLine(line, values);
-				}
-				
-				line = br.readLine();
-				lineCounter++;
-				
 			}
 		}
 		
 		writeCentroidToHDFS(centroids);
 	}
 	
-	
-	/**
-	 * Read float value from line
-	 * 
-	 * @param line
-	 * @param values
-	 * @return
-	 */
-	private Float[] readFloatFromLine(String line, Float[] values) {
+	private float[] getFirstCentroid() throws IOException {
+		Random r = new Random();
+		String line;
+		FileSystem fs = FileSystem.get(configuration);
+		FileStatus[] status = fs.listStatus(new Path(inputDir));
 		
-		String[] element = line.split(Constants.TEXT_SEPARATOR);
+		boolean read = true;
 		
-		if(element.length > 0) {
-			float value = Float.parseFloat(element[3].trim());
-			int row = Integer.parseInt(element[1].trim()) - 1;
-			values[row] = value;
+		float[] features = new float[10];
+		int lineCounter = 0;
+		
+		for(int j = 0; j < status.length; j++) {
+		
+			BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(status[j].getPath())));
+			
+			while((line = br.readLine()) != null) {
+				String[] element = line.split(Constants.TEXT_SEPARATOR);
+				
+				if(element[0].equals("E")) {
+					lineCounter++;
+					read = false;
+					if(r.nextInt(lineCounter) < 1) {
+						read = true;
+					}
+				} else if(read){
+					int row = Integer.parseInt(element[1]) - 1;
+					features[row] = Float.parseFloat(element[3]);
+				}
+			}
 		}
 		
-		return values;
+		return features;
+	}
+	
+	private float computeDistance(float[] features, float[] centroid) {
+			
+		float length = 0;
+			
+		for(int i = 0; i < features.length; i++) {
+			length += Math.pow((features[i] - centroid[i]), 2);
+		}
+			
+		return (float) Math.sqrt(length);
 	}
 
-	private void writeCentroidToHDFS(ArrayList<Float[]> centroids) throws IOException {
+	private void writeCentroidToHDFS(ArrayList<float[]> centroids) throws IOException {
 		FileSystem fs = FileSystem.get(configuration);
 		
 		FSDataOutputStream out = fs.create(new Path(outputDir));
 		for(int i = 0; i < centroids.size(); i++) {
-			Float[] features = centroids.get(i);
+			float[] features = centroids.get(i);
 			for(int feat = 0; feat < features.length; feat++) {
 				String line = "N";
 				line += Constants.TEXT_SEPARATOR + i + Constants.TEXT_SEPARATOR + feat + Constants.TEXT_SEPARATOR + features[feat] + "\n";

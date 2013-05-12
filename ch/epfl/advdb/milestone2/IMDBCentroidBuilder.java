@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Random;
 
 import org.apache.hadoop.conf.Configuration;
@@ -27,15 +28,80 @@ public class IMDBCentroidBuilder {
 	}
 	
 	/**
-	 * Reservoir sampling
-	 * 
-	 * @param nbr
-	 * @param conf
+	 * Extension to k-means++
 	 * @throws IOException
 	 */
-	public void createInitialCentroids() throws IOException {
-		
+	public void createInitialAdvancedCentroids() throws IOException {
 		ArrayList<ArrayList<Integer>> centroids = new ArrayList<ArrayList<Integer>>();
+		
+		FileSystem fs = FileSystem.get(configuration);
+		FileStatus[] status = fs.listStatus(new Path(inputDir));
+		
+		ArrayList<Integer> firstCentroid = getFirstRandomCentroid();
+		centroids.add(firstCentroid);
+		
+		float minDistance = 0;
+		
+		for(int clust = 1; clust < numOfIMDBClusters; clust++) {
+			// initialize array with clust float values
+			float maxDistance = 0;
+			centroids.add(new ArrayList<Integer>());
+			
+			for(int i = 0; i < status.length; i++) {
+				BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(status[i].getPath())));
+				String line;
+				
+				while((line = br.readLine()) != null) {
+					float distance = 0;
+					
+					ArrayList<Integer> newFeatures = getIMDBFeaturesFromLine(line);
+					if(newFeatures.size() == 0)
+						continue;
+					
+					minDistance = 100000;
+					for(ArrayList<Integer> centroid : centroids) {
+						distance = getDistance(centroid, newFeatures);
+						if(distance < minDistance) {
+							minDistance = distance;
+						}
+					}
+					
+					if(minDistance > maxDistance) {
+						maxDistance = minDistance;
+						centroids.set(clust, newFeatures);
+					}
+				}
+			}
+		
+		}
+		
+		writeCentroidToHDFS(centroids);
+	}
+	
+	private float getDistance(ArrayList<Integer> centroid, ArrayList<Integer> newFeatures) {
+		HashMap<Integer, Boolean> lookup = new HashMap<Integer, Boolean>();
+		
+		int cSize = centroid.size();
+		int fSize = newFeatures.size();
+		
+		
+		for(Integer i : centroid) {
+			lookup.put(i, true);
+		}
+		
+		for(Integer f : newFeatures) {
+			if(lookup.containsKey(f)) {
+				cSize--;
+				fSize--;
+			}
+		}
+		
+		return (float) Math.sqrt(cSize+fSize);
+	}
+	
+	
+	private ArrayList<Integer> getFirstRandomCentroid() throws IOException {
+		ArrayList<Integer> firstCentroid = new ArrayList<Integer>();
 		Random random = new Random();
 		
 		FileSystem fs = FileSystem.get(configuration);
@@ -45,26 +111,21 @@ public class IMDBCentroidBuilder {
 		
 		for(int i = 0; i < status.length; i++) {
 			BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(status[i].getPath())));
-			String line = br.readLine();
+			String line;
 			
-			while(line != null) {
-				if(lineCounter < numOfIMDBClusters) {
-					ArrayList<Integer> features = getIMDBFeaturesFromLine(line);
-					centroids.add(features);
-				} else {
-					int r = random.nextInt(lineCounter);
-					if(r < numOfIMDBClusters) {
-						ArrayList<Integer> features = getIMDBFeaturesFromLine(line);
-						centroids.set(r, features);
-					}
-				}
-				
-				line = br.readLine();
+			while((line = br.readLine()) != null) {
 				lineCounter++;
+				int r = random.nextInt(lineCounter);
+				if(r < 1) {
+					ArrayList<Integer> features = getIMDBFeaturesFromLine(line);
+					if(features.size() == 0)
+						continue;
+					firstCentroid = features;
+				}
 			}
 		}
 		
-		writeCentroidToHDFS(centroids);
+		return firstCentroid;
 	}
 	
 	/**

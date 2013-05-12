@@ -38,6 +38,7 @@ public class MappingMapper extends Mapper<LongWritable, Text, IntWritable, IntWr
 				String[] stringMovies = line.trim().split(Constants.TEXT_SEPARATOR);
 				
 				int cluster = Integer.parseInt(stringMovies[0]);
+				
 				while(cluster >= vClusters.size()) {
 					Hashtable<Integer, Boolean> movies = new Hashtable<Integer, Boolean>();
 					vClusters.add(movies);
@@ -78,7 +79,7 @@ public class MappingMapper extends Mapper<LongWritable, Text, IntWritable, IntWr
 			int m01 = vCentroidSize - m11;
 			int m10 = imdbCentroidSize - m11;
 			
-			float jaccardCoefficient = m11 / (m10 + m01 + m11);
+			float jaccardCoefficient = (float) m11 / (m10 + m01 + m11);
 			
 			if(jaccardCoefficient > bestJaccardCoefficient) {
 				bestJaccardCoefficient = jaccardCoefficient;

@@ -25,9 +25,7 @@ public class UserMapper extends Mapper<LongWritable, Text, IntWritable, IntWrita
 
 	private Path[] localFiles;
 	
-	private Float[][] centroids;
-	
-	
+	private float[][] centroids;
 	
 	private Hashtable<Integer, ArrayList<Integer>> clusterMovieMapping = new Hashtable<Integer, ArrayList<Integer>>();
 	
@@ -40,9 +38,9 @@ public class UserMapper extends Mapper<LongWritable, Text, IntWritable, IntWrita
 	public void setup(Context context) throws IOException {
 		Configuration conf = context.getConfiguration();
 		
-		numberOfClusters = conf.getInt(Constants.NBR_CLUSTERS, 60);
+		numberOfClusters = conf.getInt(Constants.NBR_CLUSTERS, 10);
 		
-		centroids = new Float[numberOfClusters][10];
+		centroids = new float[numberOfClusters][10];
 		
 		localFiles = DistributedCache.getLocalCacheFiles(conf);
 		
@@ -54,12 +52,19 @@ public class UserMapper extends Mapper<LongWritable, Text, IntWritable, IntWrita
 			while ((line = reader.readLine()) != null){
 				String[] stringFeatures = line.trim().split(Constants.TEXT_SEPARATOR);
 				
-				int clusterId = Integer.parseInt(stringFeatures[0]);
-				
-				if(file.toString().matches(".*(_centroids_).*"))
-					centroids[clusterId] = readDimensions(stringFeatures);
-				else
-					clusterMovieMapping.put(clusterId, readMovies(stringFeatures));
+				int clusterId = 0;
+				if(file.toString().matches(".*(_centroids_).*")) {
+					clusterId = Integer.parseInt(stringFeatures[1]);
+					centroids[clusterId][Integer.parseInt(stringFeatures[2])] = Float.parseFloat(stringFeatures[3]);
+				} else {
+					clusterId = Integer.parseInt(stringFeatures[0]);
+					if(clusterMovieMapping.containsKey(clusterId)) {
+						ArrayList<Integer> nextMovies = readMovies(stringFeatures);
+						clusterMovieMapping.get(clusterId).addAll(nextMovies);
+					} else {
+						clusterMovieMapping.put(clusterId, readMovies(stringFeatures));
+					}
+				}	
 			}
 			reader.close();
 		}
@@ -69,24 +74,23 @@ public class UserMapper extends Mapper<LongWritable, Text, IntWritable, IntWrita
 		
 		// Convert value into vector
 		String[] uValuesString = value.toString().trim().split(Constants.TEXT_SEPARATOR);
-
-		// store userId
+		
+		float[] uValues = Utility.readUValues(uValuesString);
 		int userId = Integer.parseInt(uValuesString[0]);
 		
-		float userSum = 0;
-		
 		for(Map.Entry<Integer, ArrayList<Integer>> entry : clusterMovieMapping.entrySet()) {
+			
 			int cluster = entry.getKey();
 			
-			Float[] centroidValues = centroids[cluster];
-			for(int i = 0; i < 10; i++) {
-				userSum += centroidValues[i] * Float.parseFloat(uValuesString[i]);
-			}
+			float[] centroidValues = centroids[cluster];
 			
-			if(userSum > 0) {
+			float userSum = Utility.getUserRating(centroidValues, uValues);
+			
+			if(userSum > 0.0) {
 				for(Integer movie : entry.getValue()) {
 					outputKey.set(movie);
 					outputValue.set(userId);
+					context.write(outputKey, outputValue);
 				}
 			}
 		}
@@ -99,18 +103,5 @@ public class UserMapper extends Mapper<LongWritable, Text, IntWritable, IntWrita
 		}
 		
 		return movies;
-	}
-	
-	private Float[] readDimensions(String[] dimensionString) {
-		Float[] dimensions = new Float[Constants.NUM_OF_NETFLIX_FEATURES];
-		
-		if(dimensionString.length != Constants.NUM_OF_NETFLIX_FEATURES)
-			new Exception("not enough dimensions");
-		
-		for(int i = 1; i <= Constants.NUM_OF_NETFLIX_FEATURES; i++) {
-			dimensions[i-1] = Float.parseFloat(dimensionString[i]);
-		}
-		
-		return dimensions;
 	}
 }

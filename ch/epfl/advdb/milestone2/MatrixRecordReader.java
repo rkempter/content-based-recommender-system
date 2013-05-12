@@ -57,16 +57,16 @@ public class MatrixRecordReader extends RecordReader<LongWritable, Text> {
     	valueBuffer = new StringBuffer();
         for(int i = 0; i < BUFFER_SIZE; i++) {
         	if (rr.nextKeyValue()) {
-            	String[] lineElements = rr.getCurrentValue().toString().trim().split(Constants.TEXT_SEPARATOR);
-            	int row = Integer.parseInt(lineElements[1]) - 1;
+        		String[] lineElements = rr.getCurrentValue().toString().trim().split(Constants.TEXT_SEPARATOR);
+            	int row = Integer.parseInt(lineElements[1]);
             	int column = Integer.parseInt(lineElements[2]);
             	
             	if(lineElements[0].equals("V")) {
             		valueBuffer.append(column);
-            		keyBuffer[row] = rr.getCurrentKey().get();
-            	} else {
+            		keyBuffer[row-1] = rr.getCurrentKey().get();
+            	} else if(lineElements[0].equals("U")) {
             		valueBuffer.append(row);
-            		keyBuffer[column] = rr.getCurrentKey().get();
+            		keyBuffer[column-1] = rr.getCurrentKey().get();
             	}
             	if(lineElements[0].equals("V") || lineElements[0].equals("U")) {
             		valueBuffer.append(Constants.TEXT_SEPARATOR);

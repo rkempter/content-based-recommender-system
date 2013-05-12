@@ -16,14 +16,15 @@ public class UserReducer extends Reducer<IntWritable, IntWritable, IntWritable, 
 			Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
 		
 		Iterator<IntWritable> iter = values.iterator();
-		String users = "";
+		StringBuffer users = new StringBuffer();
 		if(iter.hasNext())
-			users = String.valueOf(iter.next().get());
+			users.append(String.valueOf(iter.next().get()));
 		
 		while(iter.hasNext()) {
-			users += Constants.TEXT_SEPARATOR + iter.next().get();	
+			users.append(Constants.TEXT_SEPARATOR);
+			users.append(iter.next().get());
 		}
 		
-		context.write(key, new Text(users));
+		context.write(key, new Text(users.toString()));
 	}
 }

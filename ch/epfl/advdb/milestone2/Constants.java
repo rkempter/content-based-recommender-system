@@ -2,8 +2,8 @@ package ch.epfl.advdb.milestone2;
 
 public class Constants {
 
-	public static final int NUM_OF_MAPPERS = 1;
-	public static final int NUM_OF_REDUCERS = 1;
+	public static final int NUM_OF_MAPPERS = 44;
+	public static final int NUM_OF_REDUCERS = 44;
 	
 	public static final int NUM_OF_ITERATIONS = 10;
 	
@@ -24,6 +24,7 @@ public class Constants {
 	public static final String TEXT_SEPARATOR = ",";
 	
 	public static final String FEATURE_DIMENSION_STRING = "feature.dimensions";
+	public static final String NBR_CLUSTERS = "nbr.clusters";
 	public static final String MATRIX_TYPE = "matrix.type";
 	
 	public static final int IMDB_CLUSTER = 1;

@@ -34,7 +34,7 @@ public class newMovieReducer extends Reducer<IntWritable, IntWritable, IntWritab
 		for(Path file : localFiles) {
 			
 			// Check if file contains word centroid
-			if(!file.toString().matches(".*(mapping).*"))
+			if(file.toString().matches(".*(_centroids_).*"))
 				continue;
 			
 			BufferedReader reader = new BufferedReader(new FileReader(file.toString()));
