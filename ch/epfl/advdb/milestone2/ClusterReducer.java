@@ -25,6 +25,8 @@ public class ClusterReducer extends
 	
 	public void setup(Context context) throws IOException {
 		Configuration conf = context.getConfiguration();
+		
+		// Know if netflix or imdb dataset is worked on
 		this.clusterType = conf.getInt(Constants.MATRIX_TYPE, Constants.NETFLIX_CLUSTER);
 		
 		if(clusterType == Constants.NETFLIX_CLUSTER) {
@@ -36,7 +38,7 @@ public class ClusterReducer extends
 	
 	public void reduce(IntWritable key, 
 			Iterable<FeatureWritable> values, Context context) throws IOException, InterruptedException {
-		
+	
 		HashMap<Integer, Float> centroid = new HashMap<Integer, Float>();
 		HashMap<Integer, Boolean> movies = new HashMap<Integer, Boolean>();
 		
@@ -46,18 +48,28 @@ public class ClusterReducer extends
 		
 		while(iterator.hasNext()) {
 			movie = iterator.next();
+			// store movie in hashtable
 			movies.put(movie.getId(), true);
 			int featureNumber = movie.getFeatureNumber();
 			float featureValue = movie.getFeatureValue();
+			// add feature value to centroid for computing the mean
 			if(centroid.containsKey(featureNumber))
 				featureValue = centroid.get(featureNumber) + featureValue;
 			centroid.put(featureNumber,featureValue);
 		}
 		
 		int size = movies.size();
+		float length = 0;
+		
+		// compute length
+		for(Map.Entry<Integer, Float> entry : centroid.entrySet()) {
+			entry.setValue(entry.getValue() / size);
+			length += Math.pow(entry.getValue(),2);
+		}
 		
 		for(Map.Entry<Integer, Float> entry : centroid.entrySet()) {
-			float value = entry.getValue() / size;
+			// normalization
+			float value = entry.getValue() / (float) Math.sqrt(length);
 			
 			// Convergence criterion
 			if(!centroid.containsKey(entry.getKey())) {
@@ -72,6 +84,7 @@ public class ClusterReducer extends
 		}
 	}
 	
+	// Counter incrementation for convergence criterion
 	private void incrementCounter(Context context) {
 		if(clusterType == Constants.NETFLIX_CLUSTER) {
 			context.getCounter(CLUSTER_COUNTERS.NETFLIX_COUNTER).increment(1);

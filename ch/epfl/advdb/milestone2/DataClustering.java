@@ -63,12 +63,17 @@ public class DataClustering {
 						  String.valueOf(Constants.TEXT_SEPARATOR));
 		
 		configuration.setInt("mapred.map.tasks", numOfMappers);
+		configuration.setInt("mapred.reduce.tasks", numOfReducers);
 	}
 	
 	public void setRadius(boolean flag) {
 		this.radiusTrue = flag;
 	}
 	
+	/**
+	 * Call for creation of initial centroids
+	 * @throws IOException
+	 */
 	public void createInitialCentroids() throws IOException {
 		System.out.println("Apply k-means++ to imdb - Build initial centroids");
 		IMDBCentroidBuilder icb = new IMDBCentroidBuilder(configuration, inputDir+"/features/", outputDir+"/../tmp/"+numOfIMDBClusters+"_imdb_centroids_0/centroids.dat", numOfIMDBClusters);
@@ -78,27 +83,31 @@ public class DataClustering {
 		ncb.createInitialAdvancedCentroids();
 	}
 	
+	/**
+	 * Call for complete clustering-chain.
+	 * @throws IOException
+	 * @throws InterruptedException
+	 * @throws ClassNotFoundException
+	 */
 	@SuppressWarnings("deprecation")
 	public void execute() 
 			throws IOException, InterruptedException, ClassNotFoundException {
 		
-		int iter = 0;
 		long lastNetflixCounter = 0;
 		long lastImdbCounter = 0;
 		boolean imdbConvergence = false;
 		boolean netflixConvergence = false;
-		int netflixFolderNumber = 1;
-		int imdbFolderNumber = 1;
+		int netflixFolderNumber = 0;
+		int imdbFolderNumber = 0;
 
 		createInitialCentroids();
 		
-		for(; iter < 10; iter++) {
+		for(int iter = 0; iter < Constants.NUM_OF_ITERATIONS; iter++) {
 			System.out.println("Run iteration: "+iter);
 			
 			if(!imdbConvergence) {
 				{
 					Configuration conf = new Configuration(configuration);
-					conf.setInt("mapred.reduce.tasks", Constants.NUM_OF_REDUCERS);
 					conf.setInt(Constants.FEATURE_DIMENSION_STRING, Constants.NUM_OF_FEATURES);
 					conf.setInt(Constants.NBR_CLUSTERS, this.numOfIMDBClusters);
 					conf.setInt(Constants.MATRIX_TYPE, Constants.IMDB_CLUSTER);
@@ -121,18 +130,22 @@ public class DataClustering {
 					
 					imdbClustering.waitForCompletion(true);
 					long imdbCounter = imdbClustering.getCounters().findCounter(CLUSTER_COUNTERS.IMDB_COUNTER).getValue() - lastImdbCounter;
+					System.out.println("IMDB Counterdiff: "+imdbCounter);
 					lastImdbCounter = imdbClustering.getCounters().findCounter(CLUSTER_COUNTERS.IMDB_COUNTER).getValue();
+					System.out.println("IMDB counter: "+lastImdbCounter);
 					if(imdbCounter == 0) {
 						imdbConvergence = true;
 					}
 					imdbFolderNumber = iter + 1;
 				}
 			}
+		}
+		
+		for(int iter = 0; iter < Constants.NUM_OF_ITERATIONS; iter++) {
 			
 			if(!netflixConvergence) {
 				{
 					Configuration conf = new Configuration(configuration);
-					conf.setInt("mapred.reduce.tasks", Constants.NUM_OF_REDUCERS);
 					conf.setInt(Constants.FEATURE_DIMENSION_STRING, 10);
 					conf.setInt(Constants.NBR_CLUSTERS, this.numOfNetflixClusters);
 					conf.setInt(Constants.MATRIX_TYPE, Constants.NETFLIX_CLUSTER);
@@ -163,21 +176,10 @@ public class DataClustering {
 				}
 			}
 		}
-//		
-		if(radiusTrue) {
-			AvgClusterRadius acr_netflix = new AvgClusterRadius(Constants.NETFLIX_CLUSTER, numOfNetflixClusters, configuration, inputDir+"/V/", outputDir+"/../tmp/"+numOfNetflixClusters+"_netflix_centroids_"+netflixFolderNumber+"/", outputDir+"/../tmp/radius/netflix.txt");
-			float avgRadiusNetflix = acr_netflix.execute();
-			acr_netflix.writeRadiusToFile(avgRadiusNetflix);
-			AvgClusterRadius acr_imdb = new AvgClusterRadius(Constants.IMDB_CLUSTER, numOfIMDBClusters, configuration, inputDir+"/features/", outputDir+"/../tmp/"+numOfIMDBClusters+"_imdb_centroids_"+imdbFolderNumber+"/", outputDir+"/../tmp/radius/imdb.txt");
-			float avgRadiusIMDB = acr_imdb.execute();
-			acr_imdb.writeRadiusToFile(avgRadiusIMDB);
-		}
-		
 		
 		//IMDB: Assign the movie Id's to cluster
 		{
 			Configuration conf = new Configuration(configuration);
-			conf.setInt("mapred.reduce.tasks", Constants.NUM_OF_REDUCERS);
 			conf.setInt(Constants.NBR_CLUSTERS, this.numOfIMDBClusters);
 			conf.setInt(Constants.MATRIX_TYPE, Constants.IMDB_CLUSTER);
 			
@@ -202,7 +204,6 @@ public class DataClustering {
 		// Netflix: Assign the movie Id's to cluster
 		{
 			Configuration conf = new Configuration(configuration);
-			conf.setInt("mapred.reduce.tasks", Constants.NUM_OF_REDUCERS);
 			conf.setInt(Constants.NBR_CLUSTERS, numOfNetflixClusters);
 			conf.setInt(Constants.MATRIX_TYPE, Constants.NETFLIX_CLUSTER);
 			
@@ -228,7 +229,6 @@ public class DataClustering {
 		// Create Mapping between IMDB & Netflix
 		{
 			Configuration conf = new Configuration(configuration);
-			conf.setInt("mapred.reduce.tasks", Constants.NUM_OF_REDUCERS);
 			conf.setInt(Constants.NBR_CLUSTERS, numOfIMDBClusters);
 			
 			FileSystem fs = FileSystem.get(conf);
@@ -252,7 +252,6 @@ public class DataClustering {
 		// Get new movies, cluster them
 		{
 			Configuration conf = new Configuration(configuration);
-			conf.setInt("mapred.reduce.tasks", Constants.NUM_OF_REDUCERS);
 			conf.setInt(Constants.MATRIX_TYPE, Constants.IMDB_CLUSTER);
 			conf.setInt(Constants.NBR_CLUSTERS, numOfIMDBClusters);
 			
@@ -282,8 +281,6 @@ public class DataClustering {
 		 //Compute, which user could like each new movie
 		{
 			Configuration conf = new Configuration(configuration);
-			conf.setInt("mapred.reduce.tasks", Constants.NUM_OF_REDUCERS);
-			conf.setInt("mapred.map.tasks", Constants.NUM_OF_MAPPERS);
 			conf.setInt(Constants.NBR_CLUSTERS, numOfNetflixClusters);
 			
 			
@@ -297,7 +294,7 @@ public class DataClustering {
 			for (FileStatus status : fileStatus) {
 			    DistributedCache.addCacheFile(status.getPath().toUri(), conf);
 			}
-			
+
 			DistributedCache.createSymlink(conf);
 			
 			UserJob userMapping = new UserJob(conf, 
@@ -306,29 +303,6 @@ public class DataClustering {
 					UserReducer.class,
 				    inputDir+"/U/", 
 				    outputDir);
-			
-			userMapping.waitForCompletion(true);
-		}
-		
-		// Compute F-Score
-		{
-			Configuration conf = new Configuration(configuration);
-			
-			FileSystem fs = FileSystem.get(conf);
-			
-			FileStatus[] fileStatus = fs.listStatus(new Path(outputDir));
-			for (FileStatus status : fileStatus) {
-			    DistributedCache.addCacheFile(status.getPath().toUri(), conf);
-			}
-			
-			DistributedCache.createSymlink(conf);
-			
-			ScoreJob userMapping = new ScoreJob(conf, 
-					"Computing f-score", 
-					ScoreMapper.class,
-					ScoreReducer.class,
-				    testDir+"/ratings/", 
-				    outputDir+"/../tmp/fscore");
 			
 			userMapping.waitForCompletion(true);
 		}
@@ -380,8 +354,6 @@ public class DataClustering {
 			setOutputValueClass(FeatureWritable.class);
 			setMapOutputKeyClass(IntWritable.class);
 			setMapOutputValueClass(FeatureWritable.class);
-			
-			setNumReduceTasks(Constants.NUM_OF_REDUCERS);
 
 			setOutputFormatClass(TextOutputFormat.class);
 
@@ -414,8 +386,6 @@ public class DataClustering {
 			setOutputValueClass(Text.class);
 			setMapOutputKeyClass(IntWritable.class);
 			setMapOutputValueClass(IntWritable.class);
-			
-			setNumReduceTasks(Constants.NUM_OF_REDUCERS);
 
 			if(matrixType.equals("N")) {
 				setInputFormatClass(MatrixInputFormat.class);
@@ -450,8 +420,6 @@ public class DataClustering {
 			setOutputKeyClass(IntWritable.class);
 			setOutputValueClass(IntWritable.class);
 			
-			setNumReduceTasks(Constants.NUM_OF_REDUCERS);
-
 			setInputFormatClass(TextInputFormat.class);
 			setOutputFormatClass(TextOutputFormat.class);
 
@@ -485,8 +453,6 @@ public class DataClustering {
 			setMapOutputKeyClass(IntWritable.class);
 			setMapOutputValueClass(IntWritable.class);
 			
-			setNumReduceTasks(Constants.NUM_OF_REDUCERS);
-
 			setInputFormatClass(TextInputFormat.class);
 			setOutputFormatClass(TextOutputFormat.class);
 
@@ -522,47 +488,10 @@ public class DataClustering {
 			setMapOutputKeyClass(IntWritable.class);
 			setMapOutputValueClass(IntWritable.class);
 			
-			setNumReduceTasks(Constants.NUM_OF_REDUCERS);
-
 			setOutputFormatClass(TextOutputFormat.class);
 
 			FileInputFormat.addInputPath(this, new Path(inputPath));
 			FileOutputFormat.setOutputPath(this, new Path(outputPath));
-		}
-	}
-	
-private class ScoreJob extends Job {
-		
-		@SuppressWarnings("deprecation")
-		public ScoreJob(Configuration conf, 
-				String jobName,
-				Class<? extends Mapper<LongWritable, Text, 
-						IntWritable, IntWritable>> mapper,
-				Class<? extends Reducer<IntWritable, IntWritable, 
-						IntWritable, FloatWritable>> reducer,
-				String inputPath, 
-				String outputPath) throws IOException {
-			
-			super(conf, jobName);
-			
-			setJarByClass(ScoreJob.class);
-
-			setMapperClass(mapper);
-			setReducerClass(reducer);
-
-			setOutputKeyClass(IntWritable.class);
-			setOutputValueClass(FloatWritable.class);
-			setMapOutputKeyClass(IntWritable.class);
-			setMapOutputValueClass(IntWritable.class);
-			
-			setNumReduceTasks(Constants.NUM_OF_REDUCERS);
-
-			setInputFormatClass(TextInputFormat.class);
-			setOutputFormatClass(TextOutputFormat.class);
-
-			FileInputFormat.addInputPath(this, new Path(inputPath));
-			FileOutputFormat.setOutputPath(this, new Path(outputPath));
-			
 		}
 	}
 }

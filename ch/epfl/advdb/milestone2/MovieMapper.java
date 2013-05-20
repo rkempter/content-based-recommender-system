@@ -42,6 +42,9 @@ public class MovieMapper extends Mapper<LongWritable, Text, IntWritable, IntWrit
 		clusters = Utility.readCluster(new HashMap[numberOfClusters], localFiles);
 	}
 	
+	/**
+	 * Assigns each movie to the best possible cluster
+	 */
 	public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
 		
 		ArrayList<FeatureWritable> features = new ArrayList<FeatureWritable>();
@@ -54,7 +57,7 @@ public class MovieMapper extends Mapper<LongWritable, Text, IntWritable, IntWrit
 			}
 		} else {
 			for(int i = 1; i < movie.length; i++) {
-				features.add(new FeatureWritable(Integer.parseInt(movie[0]), i, Float.parseFloat(movie[i].trim())));
+				features.add(new FeatureWritable(Integer.parseInt(movie[0]), i-1, Float.parseFloat(movie[i].trim())));
 			}
 		}
 		

@@ -42,18 +42,27 @@ public class ClusterMapper extends Mapper<LongWritable, Text, IntWritable, Featu
 		
 		String[] movie = value.toString().trim().split(Constants.TEXT_SEPARATOR);
 		
+		// Same class for both netflix and imdb dataset.
 		if(clusterType == Constants.IMDB_CLUSTER) {
 			for(int i = 1; i < movie.length; i++) {
 				features.add(new FeatureWritable(Integer.parseInt(movie[0]), Integer.parseInt(movie[i]), (float) 1));
 			}
 		} else {
+			float size = 0;
+			// Spherical k-means - normalize the vectors
 			for(int i = 1; i < movie.length; i++) {
-				features.add(new FeatureWritable(Integer.parseInt(movie[0]), i-1, Float.parseFloat(movie[i].trim())));
+				size += Math.pow(Float.parseFloat(movie[i].trim()), 2);
+			}
+			size = (float) Math.sqrt(size);
+			for(int i = 1; i < movie.length; i++) {
+				features.add(new FeatureWritable(Integer.parseInt(movie[0]), i-1, Float.parseFloat(movie[i].trim()) / size));
 			}
 		}
 		
+		// Find optimal cluster
 		int optimalCluster = Utility.getBestCluster(clusters, features);
 		
+		// Send each fature and its corresponding value with the cluster-id to the reducer
 		for(FeatureWritable feature : features) {
 			outputKey.set(optimalCluster);
 			outputValue = feature;

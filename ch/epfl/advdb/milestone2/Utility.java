@@ -135,6 +135,21 @@ public class Utility {
 		
 		return (float) Math.sqrt(length);
 	}
+	
+	/**
+	 * Computes the length of an HashMap-vector
+	 * 
+	 * @param ArrayList<FeatureWritable> vector
+	 * @return float
+	 */
+	public static float getVectorSize(float[] v) {
+		float length = 0;
+		for(int i = 0; i < v.length; i++) {
+			length += Math.pow(v[i], 2);
+		}
+		
+		return (float) Math.sqrt(length);
+	}
 
 	public static float[] readUValues(String[] elements) {
 		float[] uValues = new float[10];

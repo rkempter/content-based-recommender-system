@@ -29,9 +29,8 @@ public class MappingMapper extends Mapper<LongWritable, Text, IntWritable, IntWr
 		Path localFiles[] = DistributedCache.getLocalCacheFiles(conf);
 		
 		String line = null;
-		
+		// Load vCluster into distributed cache.
 		for(Path file : localFiles) {
-			
 			BufferedReader reader = new BufferedReader(new FileReader(file.toString()));
 			while ((line = reader.readLine()) != null){
 				
@@ -52,6 +51,9 @@ public class MappingMapper extends Mapper<LongWritable, Text, IntWritable, IntWr
 		}
 	}
 
+	/**
+	 * Creates a n:n mapping between the IMDB and Netflix clusters (see report for more details)
+	 */
 	public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
 		
 		String[] stringMovies = value.toString().trim().split(Constants.TEXT_SEPARATOR);
@@ -60,6 +62,8 @@ public class MappingMapper extends Mapper<LongWritable, Text, IntWritable, IntWr
 		
 		int bestMapping = 0;
 		float bestJaccardCoefficient = 0;
+		
+		boolean sent = false;
 		
 		for(int j = 0; j < vClusters.size(); j++) {
 			Hashtable<Integer, Boolean> vCentroid = vClusters.get(j);
@@ -76,9 +80,18 @@ public class MappingMapper extends Mapper<LongWritable, Text, IntWritable, IntWr
 				}
 			}
 			
-			int m01 = vCentroidSize - m11;
-			int m10 = imdbCentroidSize - m11;
+			int m01 = vCentroidSize - m11; // THIS NEEDS TO BE SMALL
+			int m10 = imdbCentroidSize - m11; // THIS CAN BE BIG, IF WE have a n:n mapping
 			
+			// new similarity measure (do a covering)
+			if((float) m01 / m11 < 0.4) {
+				context.write(new IntWritable(cluster), new IntWritable(j));
+				sent = true;
+			} else if((float) m10 / m11 < 0.4) {
+				context.write(new IntWritable(cluster), new IntWritable(j));	
+				sent = true;
+			}
+			// Jacard Similarity in case that the two criterias before have not been met.
 			float jaccardCoefficient = (float) m11 / (m10 + m01 + m11);
 			
 			if(jaccardCoefficient > bestJaccardCoefficient) {
@@ -86,8 +99,8 @@ public class MappingMapper extends Mapper<LongWritable, Text, IntWritable, IntWr
 				bestMapping = j;
 			}
 		}
-		
-		context.write(new IntWritable(cluster), new IntWritable(bestMapping));
+		if(!sent)
+			context.write(new IntWritable(cluster), new IntWritable(bestMapping));
 	}
 
 }

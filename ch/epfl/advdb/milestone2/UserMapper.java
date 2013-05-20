@@ -27,7 +27,12 @@ public class UserMapper extends Mapper<LongWritable, Text, IntWritable, IntWrita
 	
 	private float[][] centroids;
 	
+	float max = 0;
+	float min = 0;
+	
 	private Hashtable<Integer, ArrayList<Integer>> clusterMovieMapping = new Hashtable<Integer, ArrayList<Integer>>();
+	
+	private HashMap<Integer, Boolean> users = new HashMap<Integer, Boolean>();
 	
 	private int numberOfClusters;
 	
@@ -79,19 +84,27 @@ public class UserMapper extends Mapper<LongWritable, Text, IntWritable, IntWrita
 		int userId = Integer.parseInt(uValuesString[0]);
 		
 		for(Map.Entry<Integer, ArrayList<Integer>> entry : clusterMovieMapping.entrySet()) {
-			
+				
 			int cluster = entry.getKey();
-			
+				
 			float[] centroidValues = centroids[cluster];
-			
+				
 			float userSum = Utility.getUserRating(centroidValues, uValues);
-			
-			if(userSum > 0.0) {
+				
+				
+			if(userSum > 0 & userSum <= 2.5) {
 				for(Integer movie : entry.getValue()) {
 					outputKey.set(movie);
+						
 					outputValue.set(userId);
 					context.write(outputKey, outputValue);
 				}
+			}
+				
+			if(userSum > max) {
+				max = userSum;
+			} else if(userSum < min) {
+				min = userSum;
 			}
 		}
 	}

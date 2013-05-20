@@ -3,6 +3,7 @@ package ch.epfl.advdb.milestone2;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.Iterator;
@@ -21,7 +22,7 @@ public class newMovieReducer extends Reducer<IntWritable, IntWritable, IntWritab
 	protected IntWritable outputKey = new IntWritable();
 	protected IntWritable outputValue = new IntWritable();
 	
-	private Hashtable<Integer, Integer> mapping = new Hashtable<Integer, Integer>();
+	private Hashtable<Integer, ArrayList<Integer>> mapping = new Hashtable<Integer, ArrayList<Integer>>();
 
 	@SuppressWarnings({ "deprecation", "unchecked" })
 	public void setup(Context context) throws IOException {
@@ -45,7 +46,16 @@ public class newMovieReducer extends Reducer<IntWritable, IntWritable, IntWritab
 				if(stringMappings.length != 2)
 					new Exception("Problem with reading the file. Not correct format!");
 				
-				mapping.put(Integer.parseInt(stringMappings[0]), Integer.parseInt(stringMappings[1]));
+				int iCluster = Integer.parseInt(stringMappings[0]);
+				int vCluster = Integer.parseInt(stringMappings[1]);
+				
+				if(mapping.containsKey(iCluster)) {
+					mapping.get(iCluster).add(vCluster);
+				} else {
+					ArrayList<Integer> newList = new ArrayList<Integer>();
+					newList.add(vCluster);
+					mapping.put(iCluster, newList);
+				}
 			}
 			reader.close();
 		}
@@ -63,8 +73,11 @@ public class newMovieReducer extends Reducer<IntWritable, IntWritable, IntWritab
 			movies += Constants.TEXT_SEPARATOR + iter.next().get();	
 		}
 	
-		int newKey = mapping.get(key.get());
+		ArrayList<Integer> newKeys = mapping.get(key.get());
 		
-		context.write(new IntWritable(newKey), new Text(movies));
+		for(Integer newKey : newKeys) {
+			context.write(new IntWritable(newKey), new Text(movies));
+		}
+		
 	}
 }

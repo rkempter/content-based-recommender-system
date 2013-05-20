@@ -11,7 +11,9 @@ import org.apache.hadoop.mapreduce.Reducer.Context;
 
 public class MovieReducer extends Reducer<IntWritable, IntWritable, IntWritable, Text>{
 
-	
+	/**
+	 * Outputs the cluster id together with the assigned movies.
+	 */
 	public void reduce(IntWritable key, 
 			Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
 		

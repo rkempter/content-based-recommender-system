@@ -21,7 +21,16 @@ public class NetflixCentroidBuilder {
 	String inputDir = null;
 	String outputDir = null;
 	int numOfNetflixClusters;
+	ArrayList<float[]> allMovies = new ArrayList<float[]>();
 	
+	/**
+	 * Constructor
+	 * 
+	 * @param conf
+	 * @param inputDir
+	 * @param outputDir
+	 * @param numOfNetflixClusters
+	 */
 	public NetflixCentroidBuilder(Configuration conf, String inputDir, String outputDir, int numOfNetflixClusters) {
 		this.configuration = conf;
 		this.inputDir = inputDir;
@@ -29,48 +38,43 @@ public class NetflixCentroidBuilder {
 		this.numOfNetflixClusters = numOfNetflixClusters;
 	}
 	
+	/**
+	 * Selects randomly the first centroid and runs over all
+	 * of them numOfNetflixClusters-1 times to select everytime
+	 * the one with the largest minimum distance to all others
+	 * already selected centroids.
+	 * 
+	 * @throws IOException
+	 */
 	public void createInitialAdvancedCentroids() throws IOException {
-		ArrayList<float[]> centroids = new ArrayList<float[]>();
+		readIntoMemory();
 		
-		centroids.add(getFirstCentroid());
+		ArrayList<float[]> centroids = new ArrayList<float[]>();
+		Random r = new Random();
+		int first = r.nextInt(allMovies.size());
+		float[] features;
+		
+		centroids.add(allMovies.get(first));
 		
 		for(int i = 1; i < numOfNetflixClusters; i++) {
 			centroids.add(new float[10]);
-			String line;
-			float[] features = new float[10];
 			float distance = 0;
 			float maxDistance = 0;
-			int column = 0;
 			
-			FileSystem fs = FileSystem.get(configuration);
-			FileStatus[] status = fs.listStatus(new Path(inputDir));
-			
-			for(int j = 0; j < status.length; j++) {
-			
-				BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(status[j].getPath())));
+			for(int j = 0; j < allMovies.size(); j++) {
+				features = allMovies.get(j);
+				float minDistance = 100000000;
 				
-				while((line = br.readLine()) != null) {
-					String[] element = line.split(Constants.TEXT_SEPARATOR);
-					
-					if(element[0].equals("E")) {
-						float minDistance = 1000000;
-						for(float[] centroid : centroids) {
-							distance = computeDistance(features, centroid);
-							if(minDistance > distance) {
-								minDistance = distance;
-							}
-						}
-						if(minDistance > maxDistance) {
-							maxDistance = minDistance;
-							centroids.set(i, features);
-						}
-						features = new float[10];
-					} else {
-						// V, row, column, value
-						column = Integer.parseInt(element[2]);
-						int row = Integer.parseInt(element[1]) - 1;
-						features[row] = Float.parseFloat(element[3]);
+				for(float[] centroid : centroids) {
+					distance = computeDistance(features, centroid);
+					if(minDistance > distance) {
+						minDistance = distance;
 					}
+				}
+				
+				if(minDistance >= maxDistance) {
+					maxDistance = minDistance;
+					centroids.set(i, features);
 				}
 			}
 		}
@@ -78,16 +82,15 @@ public class NetflixCentroidBuilder {
 		writeCentroidToHDFS(centroids);
 	}
 	
-	private float[] getFirstCentroid() throws IOException {
-		Random r = new Random();
-		String line;
+	/**
+	 * Reads the netflix matrix into memory (possible because of the size)
+	 * 
+	 */
+	private void readIntoMemory() throws IOException {
 		FileSystem fs = FileSystem.get(configuration);
 		FileStatus[] status = fs.listStatus(new Path(inputDir));
-		
-		boolean read = true;
-		
+		String line;
 		float[] features = new float[10];
-		int lineCounter = 0;
 		
 		for(int j = 0; j < status.length; j++) {
 		
@@ -97,19 +100,18 @@ public class NetflixCentroidBuilder {
 				String[] element = line.split(Constants.TEXT_SEPARATOR);
 				
 				if(element[0].equals("E")) {
-					lineCounter++;
-					read = false;
-					if(r.nextInt(lineCounter) < 1) {
-						read = true;
+					float size = Utility.getVectorSize(features);
+					for(int i = 0; i < features.length; i++) {
+						features[i] = features[i] / size;
 					}
-				} else if(read){
+					allMovies.add(features);
+					features = new float[10];
+				} else {
 					int row = Integer.parseInt(element[1]) - 1;
 					features[row] = Float.parseFloat(element[3]);
 				}
 			}
 		}
-		
-		return features;
 	}
 	
 	private float computeDistance(float[] features, float[] centroid) {
@@ -123,6 +125,12 @@ public class NetflixCentroidBuilder {
 		return (float) Math.sqrt(length);
 	}
 
+	/**
+	 * Write the centroid to hdfs
+	 * 
+	 * @param ArrayList<float[]> centroids
+	 * @throws IOException
+	 */
 	private void writeCentroidToHDFS(ArrayList<float[]> centroids) throws IOException {
 		FileSystem fs = FileSystem.get(configuration);
 		
